@@ -58,6 +58,11 @@ class WithdrawalViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) } // 로딩 상태 시작
             try {
+
+                // 토큰 삭제
+                authRepository.logout()
+
+
                 // TODO: 실제 회원탈퇴 API 호출 로직을 여기에 구현합니다.
                 // val result = authRepository.withdraw()
                 // if (result.isSuccess) {
