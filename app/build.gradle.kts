@@ -10,7 +10,7 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
 
-    id("kotlin-kapt") // 👈 [1] 이 줄 추가
+    id("kotlin-kapt")
 
 }
 
@@ -50,7 +50,6 @@ android {
         debug {
             // 개발 모드 (Debug)에서만 사용할 BuildConfig 필드
 //            buildConfigField("Stirng", "BASE_URL", localProperties.getProperty("BASE_URL_DEV"))
-
         }
 
         release {
@@ -97,7 +96,7 @@ dependencies {
     //
     // 추가한 라이브러리들
     //
-    // meterial3 안정하 버전
+    // meterial3 안정화 버전
     implementation("androidx.compose.material3:material3:1.4.0")    // 새로고침을 사용하기 위한 버전
 
 
@@ -108,7 +107,7 @@ dependencies {
     // Preferences DataStore -> 유저 정보 저장
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // 파일 및 SharedPreferences 암호화를 위한 Jetpack 보안 라이브_러리
+    // 파일 및 SharedPreferences 암호화를 위한 Jetpack 보안 라이브러리
     implementation("androidx.security:security-crypto:1.0.0")
 
 
@@ -135,7 +134,6 @@ dependencies {
 
     ksp("com.google.dagger:hilt-compiler:2.56.2") // -> 위 코드 수정본
 
-
     // Coil 라이브러리
     implementation("io.coil-kt.coil3:coil-compose:3.2.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
@@ -144,10 +142,8 @@ dependencies {
     // 카카오 로그인 API 모듈
     implementation("com.kakao.sdk:v2-user:2.21.0")
 
-
     // 디자인 아이콘용 라이브러리
     implementation("androidx.compose.material:material-icons-extended") // 더 많은 아이콘 사용을 위해
-
 
     // Krossbow 라이브러리 -> Stomp 통신을 위한 라이브러리
     val krossbowVersion = "7.0.0"
@@ -171,9 +167,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
 
 
-    // 👇 [2] Moshi 라이브러리 추가
+    // Moshi 라이브러리 추가
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
-//     kapt("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
-
-
 }

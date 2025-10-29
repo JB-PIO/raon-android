@@ -1,5 +1,7 @@
 package com.example.raon.core.di
 
+import android.util.Log
+import com.example.raon.core.common.AppConstants
 import com.example.raon.core.network.AuthInterceptor
 import com.example.raon.core.network.TokenAuthenticator
 import com.example.raon.core.network.api.ImageStorageService
@@ -31,13 +33,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-
-    // --- 서버별 기본 URL ---
-//    private const val RAON_SERVER_URL = "http://10.0.2.2:4000/" // 에뮬레이터용
-//    private const val RAON_SERVER_URL = "http://192.168.188.222:4000/" // 기기 연결용
-
-    //    private const val RAON_SERVER_URL = "https://158.179.164.210/" // 실제 앱 용
-    private const val RAON_SERVER_URL = "https://raon.store/" // 실제 앱 용
 
 
     // 잊지 말고 API Gateway ID를 꼭 수정 -> 바뀌면
@@ -92,9 +87,15 @@ object NetworkModule {
     @Named("RefreshClient")
     fun provideRefreshOkHttpClient(cookieJar: CookieJar): OkHttpClient {
         return OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply {
+            // ▼▼▼▼▼▼▼▼▼▼ 이 코드로 수정하세요 ▼▼▼▼▼▼▼▼▼▼
+            .addInterceptor(HttpLoggingInterceptor(object : HttpLoggingInterceptor.Logger {
+                override fun log(message: String) {
+                    Log.d("TokenDebug_Refresh", message)
+                }
+            }).apply {
                 level = HttpLoggingInterceptor.Level.BODY
             })
+            // ▲▲▲▲▲▲▲▲▲▲ 이 코드로 수정하세요 ▲▲▲▲▲▲▲▲▲▲
             .cookieJar(cookieJar)
             .build()
     }
@@ -105,7 +106,7 @@ object NetworkModule {
     @Named("RefreshRetrofit")
     fun provideRefreshRetrofit(@Named("RefreshClient") okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(RAON_SERVER_URL)
+            .baseUrl(AppConstants.RAON_SERVER_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -127,7 +128,7 @@ object NetworkModule {
     ): OkHttpClient {
         return OkHttpClient.Builder()
 
-            // 👈 [수정] 2. 타임아웃 3줄이 추가되었습니다.
+            //  타임아웃 3줄이 추가
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
@@ -147,7 +148,7 @@ object NetworkModule {
     @Named("RaonRetrofit")
     fun provideRaonRetrofit(@Named("MainClient") okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(RAON_SERVER_URL)
+            .baseUrl(AppConstants.RAON_SERVER_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -1,6 +1,7 @@
 package com.example.raon.features.auth.data.repository
 
 import android.util.Log
+import com.example.raon.core.common.AppConstants // [수정] Import 추가
 import com.example.raon.features.auth.data.local.TokenManager
 import com.example.raon.features.auth.data.remote.api.AuthApiService
 import com.example.raon.features.auth.data.remote.dto.LoginRequest
@@ -20,9 +21,33 @@ class AuthRepository @Inject constructor(
 
     private var currentAccessToken: String? = null
 
+    // ▼▼▼▼▼▼ [수정 8.0: URI 상수 사용] ▼▼▼▼▼▼
+    private val serverUri = java.net.URI.create(AppConstants.RAON_SERVER_URL) // 실제 앱 주소 사용
+    // ▲▲▲▲▲▲ [수정 8.0: 끝] ▲▲▲▲▲▲
+
     init {
         currentAccessToken = tokenManager.getAccessToken()
-        Log.d("AuthRepository", "초기 토큰 로드 완료: $currentAccessToken")
+        Log.d("AuthRepository", "초기 AccessToken 로드: $currentAccessToken")
+
+        // ▼▼▼▼▼▼▼▼▼▼ [쿠키 복원 로직 - Secure 수정] ▼▼▼▼▼▼▼▼▼▼
+        val persistentRefreshToken = tokenManager.getRefreshToken()
+        if (persistentRefreshToken != null) {
+            try {
+                val cookie = java.net.HttpCookie("refreshToken", persistentRefreshToken).apply {
+                    domain = serverUri.host
+                    path = "/"
+                    secure = true // [수정] https 이므로 true
+                    isHttpOnly = true
+                }
+                cookieManager.cookieStore.add(serverUri, cookie)
+                Log.i("AuthRepository", "[INIT] 🟢 영구 저장소의 RefreshToken을 CookieJar로 복원 성공")
+            } catch (e: Exception) {
+                Log.e("AuthRepository", "[INIT] 🔴 CookieJar 복원 중 예외 발생", e)
+            }
+        } else {
+            Log.w("AuthRepository", "[INIT] 🟡 저장된 RefreshToken이 없어 복원할 수 없음.")
+        }
+        // ▲▲▲▲▲▲▲▲▲▲ [쿠키 복원 로직 끝] ▲▲▲▲▲▲▲▲▲▲
     }
 
     fun getAccessTokenSync(): String? {
@@ -52,30 +77,97 @@ class AuthRepository @Inject constructor(
                             tokenManager.saveAccessToken(accessToken)
                             currentAccessToken = accessToken
 
-                            val cookieHeader = response.headers()["Set-Cookie"]
-                            if (cookieHeader != null) {
-                                val refreshToken = cookieHeader.split(";")[0].split("=")[1]
-                                tokenManager.saveRefreshToken(refreshToken)
+                            val cookieHeaders = response.headers().values("Set-Cookie")
+                            val cookieHeader = cookieHeaders.firstOrNull {
+                                it.trim().startsWith("refreshToken=", ignoreCase = true)
                             }
+
+                            if (cookieHeader != null) {
+                                try {
+                                    Log.d(
+                                        "TokenDebug",
+                                        "[Login] Raw Set-Cookie header: $cookieHeader"
+                                    )
+
+                                    val uri = serverUri // 상수 사용
+
+                                    val existingCookies = cookieManager.cookieStore.get(uri)
+                                    val badCookie =
+                                        existingCookies.firstOrNull {
+                                            it.name.equals(
+                                                "refreshToken",
+                                                ignoreCase = true
+                                            )
+                                        }
+                                    if (badCookie != null) {
+                                        cookieManager.cookieStore.remove(uri, badCookie)
+                                    }
+
+                                    val parsedCookies = java.net.HttpCookie.parse(cookieHeader)
+                                    val refreshTokenCookie =
+                                        parsedCookies.firstOrNull {
+                                            it.name.equals(
+                                                "refreshToken",
+                                                ignoreCase = true
+                                            )
+                                        }
+
+                                    if (refreshTokenCookie != null) {
+                                        val fixedCookie =
+                                            java.net.HttpCookie(
+                                                refreshTokenCookie.name,
+                                                refreshTokenCookie.value
+                                            )
+                                                .apply {
+                                                    path = "/"
+                                                    domain = uri.host
+                                                    isHttpOnly = true
+                                                    secure = true // [수정] https 이므로 true
+                                                }
+
+                                        // 1. CookieManager(메모리)에 저장
+                                        cookieManager.cookieStore.add(uri, fixedCookie)
+
+                                        // 2. TokenManager(영구저장소)에 값 저장
+                                        tokenManager.saveRefreshToken(refreshTokenCookie.value)
+                                        Log.i("TokenDebug", "[Login] 🟢 RefreshToken 영구 저장 성공.")
+
+                                        Log.d(
+                                            "TokenDebug",
+                                            "[Login] Manually fixed and added cookie: ${fixedCookie} (Path=${fixedCookie.path}, Secure=${fixedCookie.secure})"
+                                        )
+                                    } else {
+                                        Log.e(
+                                            "TokenDebug",
+                                            "[Login] 'refreshToken' cookie not found in header: $cookieHeader"
+                                        )
+                                    }
+
+                                } catch (e: Exception) {
+                                    Log.e("TokenDebug", "[Login] Failed to parse and fix cookie", e)
+                                }
+                            }
+
+                            Log.d(
+                                "TokenDebug",
+                                "[Login] CookieJar 상태 (수동 저장 후): ${cookieManager.cookieStore.cookies}"
+                            )
+
                             LoginResult.Success(loginResponse.message)
                         } else {
-                            // ✅ 오타 수정
                             LoginResult.Failure(loginResponse.message)
                         }
                     } else {
-                        // ✅ 오타 수정
                         LoginResult.Failure("응답 바디가 비어있습니다.")
                     }
                 }
 
                 401 -> {
                     Log.d("LoginTest", "로그인 실패")
-                    // ✅ 오타 수정
                     LoginResult.Failure("로그인 실패 (401 Unauthorized)")
                 }
 
                 else -> {
-                    // ✅ 오타 수정
                     LoginResult.Failure("알 수 없는 오류: ${response.code()}")
                 }
             }
@@ -104,29 +196,95 @@ class AuthRepository @Inject constructor(
                         if (signUpResponse.code == "OK" && !accessToken.isNullOrBlank()) {
                             tokenManager.saveAccessToken(accessToken)
                             currentAccessToken = accessToken
-                            val cookieHeader = response.headers()["Set-Cookie"]
-                            if (cookieHeader != null) {
-                                val refreshToken = cookieHeader.split(";")[0].split("=")[1]
-                                tokenManager.saveRefreshToken(refreshToken)
+
+                            val cookieHeaders = response.headers().values("Set-Cookie")
+                            val cookieHeader = cookieHeaders.firstOrNull {
+                                it.trim().startsWith("refreshToken=", ignoreCase = true)
                             }
+
+                            if (cookieHeader != null) {
+                                try {
+                                    val uri = serverUri // 상수 사용
+
+                                    val existingCookies = cookieManager.cookieStore.get(uri)
+                                    val badCookie =
+                                        existingCookies.firstOrNull {
+                                            it.name.equals(
+                                                "refreshToken",
+                                                ignoreCase = true
+                                            )
+                                        }
+                                    if (badCookie != null) {
+                                        cookieManager.cookieStore.remove(uri, badCookie)
+                                    }
+
+                                    val parsedCookies = java.net.HttpCookie.parse(cookieHeader)
+                                    val refreshTokenCookie =
+                                        parsedCookies.firstOrNull {
+                                            it.name.equals(
+                                                "refreshToken",
+                                                ignoreCase = true
+                                            )
+                                        }
+
+                                    if (refreshTokenCookie != null) {
+                                        val fixedCookie =
+                                            java.net.HttpCookie(
+                                                refreshTokenCookie.name,
+                                                refreshTokenCookie.value
+                                            )
+                                                .apply {
+                                                    path = "/"
+                                                    domain = uri.host
+                                                    isHttpOnly = true
+                                                    secure = true // [수정] https 이므로 true
+                                                }
+
+                                        // 1. CookieManager(메모리)에 저장
+                                        cookieManager.cookieStore.add(uri, fixedCookie)
+
+                                        // 2. TokenManager(영구저장소)에 값 저장
+                                        tokenManager.saveRefreshToken(refreshTokenCookie.value)
+                                        Log.i("TokenDebug", "[Signup] 🟢 RefreshToken 영구 저장 성공.")
+
+                                        Log.d(
+                                            "TokenDebug",
+                                            "[Signup] Manually fixed and added cookie: ${fixedCookie} (Path=${fixedCookie.path}, Secure=${fixedCookie.secure})"
+                                        )
+                                    } else {
+                                        Log.e(
+                                            "TokenDebug",
+                                            "[Signup] 'refreshToken' cookie not found in header: $cookieHeader"
+                                        )
+                                    }
+
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "TokenDebug",
+                                        "[Signup] Failed to parse and fix cookie",
+                                        e
+                                    )
+                                }
+                            }
+                            Log.d(
+                                "TokenDebug",
+                                "[Signup] CookieJar 상태 (수동 저장 후): ${cookieManager.cookieStore.cookies}"
+                            )
+
                             SignUpResult.Success(signUpResponse.message)
                         } else {
-                            // ✅ 오타 수정
                             SignUpResult.Failure(signUpResponse.message)
                         }
                     } else {
-                        // ✅ 오타 수정
                         SignUpResult.Failure("회원가입 실패: 응답 바디가 비어있습니다.")
                     }
                 }
 
                 409 -> {
-                    // ✅ 오타 수정
-                    SignUpResult.Failure("이미 가입된 이메일입니다.")
+                    SignUpResult.Failure("이미 가입된_ 이메일입니다.")
                 }
 
                 else -> {
-                    // ✅ 오타 수정
                     SignUpResult.Failure("회원가입 실패 (코드: ${response.code()})")
                 }
             }
@@ -150,11 +308,7 @@ class AuthRepository @Inject constructor(
 
         Log.d("Logout_Test", "--- 쿠키(Refresh Token) 삭제 전 ---")
         val cookiesBefore = cookieManager.cookieStore.cookies
-        if (cookiesBefore.isEmpty()) {
-            Log.d("Logout_Test", "저장된 쿠키가 없습니다.")
-        } else {
-            Log.d("Logout_Test", "저장된 쿠키: $cookiesBefore")
-        }
+        Log.d("Logout_Test", "저장된 쿠키: $cookiesBefore")
 
         cookieManager.cookieStore.removeAll()
 
@@ -170,15 +324,62 @@ class AuthRepository @Inject constructor(
         return try {
             val response = apiService.refreshToken()
 
-            if (response.code == "OK" && response.data?.accessToken != null) {
-                val newAccessToken = response.data.accessToken
-                currentAccessToken = newAccessToken
-                tokenManager.saveAccessToken(newAccessToken)
-                Log.d("AuthRepository", "토큰 재발급 성공! 새 토큰 저장 완료: $newAccessToken")
-                newAccessToken
+            if (response.isSuccessful && response.body() != null) {
+                val apiResponse = response.body()!!
+                if (apiResponse.code == "OK" && apiResponse.data?.accessToken != null) {
+
+                    val newAccessToken = apiResponse.data.accessToken
+                    currentAccessToken = newAccessToken
+                    tokenManager.saveAccessToken(newAccessToken)
+                    Log.d("AuthRepository", "토큰 재발급 성공! 새 AccessToken 저장 완료.")
+
+                    // ▼▼▼▼▼▼ [새 RefreshToken 덮어쓰기 로직 - Secure 수정] ▼▼▼▼▼▼
+                    val cookieHeaders = response.headers().values("Set-Cookie")
+                    val cookieHeader = cookieHeaders.firstOrNull {
+                        it.trim().startsWith("refreshToken=", ignoreCase = true)
+                    }
+
+                    if (cookieHeader != null) {
+                        try {
+                            val uri = serverUri // 상수 사용
+                            val parsedCookies = java.net.HttpCookie.parse(cookieHeader)
+                            val refreshTokenCookie = parsedCookies.firstOrNull {
+                                it.name.equals("refreshToken", ignoreCase = true)
+                            }
+
+                            if (refreshTokenCookie != null) {
+                                val newRefreshTokenValue = refreshTokenCookie.value
+                                // 1. (중요!) 영구 저장소(SharedPreferences) 업데이트
+                                tokenManager.saveRefreshToken(newRefreshTokenValue)
+
+                                // 2. (안정성) 현재 CookieJar(메모리)도 새 값으로 덮어쓰기
+                                val fixedCookie =
+                                    java.net.HttpCookie("refreshToken", newRefreshTokenValue)
+                                        .apply {
+                                            path = "/"
+                                            domain = uri.host
+                                            isHttpOnly = true
+                                            secure = true // [수정] https 이므로 true
+                                        }
+                                cookieManager.cookieStore.add(uri, fixedCookie)
+                                Log.i("TokenDebug", "[Refresh] 🟢 새 RefreshToken 영구 저장/메모리 갱신 성공.")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("TokenDebug", "[Refresh] 🔴 새 RefreshToken 파싱/저장 실패", e)
+                        }
+                    }
+                    // ▲▲▲▲▲▲ [덮어쓰기 로직 끝] ▲▲▲▲▲▲
+
+                    newAccessToken // 새 AccessToken 반환
+                } else {
+                    Log.e("AuthRepository", "API 응답 실패: ${apiResponse.message}")
+                    logout()
+                    null
+                }
             } else {
-                Log.e("AuthRepository", "API 응답 실패: ${response.message}")
-                logout()
+                // 401 (EXP_TOKEN 등) 또는 500 등 서버 오류
+                Log.e("AuthRepository", "HTTP 오류: ${response.code()} ${response.message()}")
+                logout() // 토큰이 유효하지 않으므로 로그아웃
                 null
             }
         } catch (e: Exception) {

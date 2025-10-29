@@ -43,6 +43,12 @@ class LoginViewModel @Inject constructor(
     var passwordVisible by mutableStateOf(false)
         private set
 
+
+    // UI 상태 관리를 위한 변수들
+//    var email by mutableStateOf("")
+//        private set
+//    var password by mutableStateOf("")
+
     private val _loginResult = MutableStateFlow<LoginResult>(LoginResult.Idle)
     val loginResult = _loginResult.asStateFlow()
 

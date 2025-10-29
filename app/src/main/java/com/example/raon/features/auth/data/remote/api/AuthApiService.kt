@@ -32,7 +32,8 @@ interface AuthApiService {
 
     // AccessToken 재발급 요청
     @POST("api/v1/auth/refresh")
-    suspend fun refreshToken(): ApiResponse<RefreshTokenResponse>
+//    suspend fun refreshToken(): ApiResponse<RefreshTokenResponse>
+    suspend fun refreshToken(): Response<ApiResponse<RefreshTokenResponse>> // response로 감싸기
 
 
 }

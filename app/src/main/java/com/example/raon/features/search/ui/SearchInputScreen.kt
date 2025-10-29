@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,6 +41,8 @@ fun SearchInputScreen(
     var searchQuery by remember { mutableStateOf("") }
     val recentSearches = remember {
         mutableStateListOf("아이폰", "아이폰13미니", "아이폰12", "갤럭시", "운동화", "맥북")
+//        mutableStateListOf("아이폰", "아이폰13미니", "아이폰12", "갤럭시", "운동화", "맥북")
+
     }
     val focusManager = LocalFocusManager.current
 

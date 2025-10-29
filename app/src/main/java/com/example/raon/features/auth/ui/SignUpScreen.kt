@@ -173,7 +173,7 @@ fun SignUpScreen(
                     )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // ✨ 새롭게 디자인된 주소 표시 UI
+                    // 새롭게 디자인된 주소 표시 UI
                     LocationDisplayField(
                         address = uiState.userLocation
                     )
@@ -207,7 +207,7 @@ fun SignUpScreen(
     }
 }
 
-// ✨ OutlinedTextField 대신 커스텀 UI로 완전히 교체!
+// OutlinedTextField 대신 커스텀 UI로 완전히 교체!
 @Composable
 private fun LocationDisplayField(
     address: String

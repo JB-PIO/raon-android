@@ -3,10 +3,18 @@ package com.example.raon.features.auth.ui.state
 // 회원가입 화면의 모든 상태를 담는 단일 데이터 클래스
 data class SignUpUiState(
     // 1. 사용자가 입력하는 값들
-    val nickname: String = "test",
-    val email: String = "test@email.com",
-    val password: String = "test1234",
-    val passwordCheck: String = "test1234",
+//    val nickname: String = "test",
+//    val email: String = "test@email.com",
+//    val password: String = "test1234",
+//    val passwordCheck: String = "test1234",
+
+
+    val nickname: String = "",
+    val email: String = "",
+    val password: String = "",
+    val passwordCheck: String = "",
+
+
     val userLocation: String = "",
     val userLocationId: Int = -1,
 
