@@ -82,5 +82,11 @@ class UserRepositoryImpl @Inject constructor(
         return handleApi { userApiService.updateProfileImage(request) }.map { }
     }
 
+    override suspend fun clearUserProfileData() {
+        // DataStore의 사용자 프로필 정보를 초기값으로 덮어쓰거나 지우는 로직
+        userDataStore.clear() // datastore를 전부 지우는 함수 같음
+        Log.i("DataStore", "✅ DataStore의 사용자 프로필 데이터가 초기화되었습니다.")
+    }
+
 
 }

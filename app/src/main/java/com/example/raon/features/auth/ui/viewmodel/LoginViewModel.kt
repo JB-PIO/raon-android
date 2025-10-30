@@ -29,7 +29,6 @@ sealed class LoginResult {
 // @Inject constructor 사용 => 즉 Hilt 사용해서 context를 직접 주입 하지 않아도 됨
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-//    private val authRepository: AuthRepository = AuthRepository() // -> Hilt 사용전
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 
@@ -43,11 +42,6 @@ class LoginViewModel @Inject constructor(
     var passwordVisible by mutableStateOf(false)
         private set
 
-
-    // UI 상태 관리를 위한 변수들
-//    var email by mutableStateOf("")
-//        private set
-//    var password by mutableStateOf("")
 
     private val _loginResult = MutableStateFlow<LoginResult>(LoginResult.Idle)
     val loginResult = _loginResult.asStateFlow()

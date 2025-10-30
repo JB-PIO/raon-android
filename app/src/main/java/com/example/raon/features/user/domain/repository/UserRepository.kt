@@ -17,4 +17,7 @@ interface UserRepository {
 
     // [추가] 프로필 이미지 URL 업데이트 (파일이 아닌 URL을 받음)
     suspend fun updateProfileImage(imageUrl: String): ApiResult<Unit>
+
+
+    suspend fun clearUserProfileData() // DataStore 초기화 함수 추가
 }

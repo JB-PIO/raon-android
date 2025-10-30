@@ -1,7 +1,7 @@
 package com.example.raon.features.auth.data.repository
 
 import android.util.Log
-import com.example.raon.core.common.AppConstants // [수정] Import 추가
+import com.example.raon.core.common.AppConstants
 import com.example.raon.features.auth.data.local.TokenManager
 import com.example.raon.features.auth.data.remote.api.AuthApiService
 import com.example.raon.features.auth.data.remote.dto.LoginRequest
@@ -16,14 +16,12 @@ import javax.inject.Inject
 class AuthRepository @Inject constructor(
     private val apiService: AuthApiService,
     private val tokenManager: TokenManager,
-    private val cookieManager: CookieManager
+    private val cookieManager: CookieManager,
 ) {
 
     private var currentAccessToken: String? = null
 
-    // ▼▼▼▼▼▼ [수정 8.0: URI 상수 사용] ▼▼▼▼▼▼
     private val serverUri = java.net.URI.create(AppConstants.RAON_SERVER_URL) // 실제 앱 주소 사용
-    // ▲▲▲▲▲▲ [수정 8.0: 끝] ▲▲▲▲▲▲
 
     init {
         currentAccessToken = tokenManager.getAccessToken()
@@ -47,7 +45,6 @@ class AuthRepository @Inject constructor(
         } else {
             Log.w("AuthRepository", "[INIT] 🟡 저장된 RefreshToken이 없어 복원할 수 없음.")
         }
-        // ▲▲▲▲▲▲▲▲▲▲ [쿠키 복원 로직 끝] ▲▲▲▲▲▲▲▲▲▲
     }
 
     fun getAccessTokenSync(): String? {
@@ -317,6 +314,8 @@ class AuthRepository @Inject constructor(
         Log.d("Logout_Test", "남아있는 쿠키: $cookiesAfter")
 
         Log.d("Logout_Test", "로그아웃 절차 완료.")
+
+
     }
 
     suspend fun refreshToken(): String? {
