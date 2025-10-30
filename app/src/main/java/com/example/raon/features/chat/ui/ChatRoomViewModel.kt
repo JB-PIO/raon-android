@@ -32,12 +32,26 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
 
-// 데이터 클래스는 변경 없음
+// ==============================================================================================
+// 🎨 [Domain Model] AI 이미지 분석 결과를 UI에 전달하기 위한 데이터 클래스
+// ==============================================================================================
 data class ImageAnalysisResult(
     val imageUrl: String,
     val result: String,
     val similarImages: List<String> = emptyList()
 )
+
+// ==============================================================================================
+// 🚨 [Domain Model] AI 사기 탐지 결과를 UI에 전달하기 위한 데이터 클래스 (새로 추가됨)
+// ==============================================================================================
+data class FraudDetectionResult(
+    val level: String, // "SAFE", "WARNING", "DANGER"
+    val message: String // 서버에서 받은 상세 경고 메시지
+)
+
+// ==============================================================================================
+// 📦 [UI State]
+// ==============================================================================================
 
 // 화면 상단 바 상품 정보 data class
 data class ChatProductInfo(
@@ -49,12 +63,13 @@ data class ChatProductInfo(
     val viewableThumbnailUrl: String?
 )
 
-// 채팅 화면 전체 UI 상태
+// 채팅 화면 전체 UI 상태 (fraudWarningMessage -> fraudDetectionResult로 변경)
 data class ChatUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val messages: List<ChatMessage> = emptyList(),
-    val fraudWarningMessage: String? = null,
+    // val fraudWarningMessage: String? = null, // <- 기존 필드 제거
+    val fraudDetectionResult: FraudDetectionResult? = null, // <- 새 필드 추가
     val productInfo: ChatProductInfo? = null,
     val opponentNickname: String? = null,
     val isCurrentUserBuyer: Boolean = false,
@@ -63,6 +78,10 @@ data class ChatUiState(
     val imageAnalysisResult: List<ImageAnalysisResult>? = null,
     val isDetectingFraud: Boolean = false
 )
+
+// ==============================================================================================
+// 🚀 [ViewModel]
+// ==============================================================================================
 
 @HiltViewModel
 class ChatRoomViewModel @Inject constructor(
@@ -281,12 +300,22 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 사기 탐지 API 호출 및 결과 처리 (수정됨)
+     */
     fun detectFraud() {
         viewModelScope.launch {
             val currentMyId = myUserId.value ?: return@launch
             val currentMessages = _uiState.value.messages
             if (currentMessages.isEmpty()) {
-                _uiState.update { it.copy(fraudWarningMessage = "분석할 대화 내용이 없습니다.") }
+                _uiState.update {
+                    it.copy(
+                        fraudDetectionResult = FraudDetectionResult(
+                            level = "WARNING",
+                            message = "분석할 대화 내용이 없습니다."
+                        )
+                    )
+                }
                 return@launch
             }
 
@@ -306,15 +335,48 @@ class ChatRoomViewModel @Inject constructor(
 
                 when (val result = chatRepository.detectFraud(chatRoomId, requestDto)) {
                     is ApiResult.Success -> {
-                        _uiState.update { it.copy(fraudWarningMessage = result.data.data?.message) }
+                        val fraudData = result.data.data
+                        if (fraudData != null) {
+                            val domainResult = FraudDetectionResult(
+                                level = fraudData.result, // SAFE, WARNING, DANGER
+                                message = fraudData.message // 경고 텍스트
+                            )
+                            _uiState.update { it.copy(fraudDetectionResult = domainResult) }
+                        } else {
+                            // 데이터는 없지만 성공한 경우 처리
+                            _uiState.update {
+                                it.copy(
+                                    fraudDetectionResult = FraudDetectionResult(
+                                        level = "SAFE",
+                                        message = "사기 징후가 감지되지 않았습니다."
+                                    )
+                                )
+                            }
+                        }
                     }
 
                     is ApiResult.Error -> {
-                        _uiState.update { it.copy(fraudWarningMessage = "분석 오류 (API: ${result.code})") }
+                        val msg = "분석 오류 (API: ${result.code})"
+                        _uiState.update {
+                            it.copy(
+                                fraudDetectionResult = FraudDetectionResult(
+                                    level = "DANGER",
+                                    message = msg
+                                )
+                            )
+                        }
                     }
 
                     is ApiResult.Exception -> {
-                        _uiState.update { it.copy(fraudWarningMessage = "분석 오류 (네트워크)") }
+                        val msg = "분석 오류 (네트워크)"
+                        _uiState.update {
+                            it.copy(
+                                fraudDetectionResult = FraudDetectionResult(
+                                    level = "DANGER",
+                                    message = msg
+                                )
+                            )
+                        }
                     }
                 }
             } finally {
@@ -323,33 +385,9 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
-//    fun startImageAnalysis() {
-//        if (_uiState.value.isAnalyzingImage || _uiState.value.imageAnalysisResult != null) return
-//
-//        viewModelScope.launch {
-//            _uiState.update { it.copy(isAnalyzingImage = true) }
-//            delay(2500)
-//
-//            val dummyResults = listOf(
-//                ImageAnalysisResult(
-//                    imageUrl = _uiState.value.productInfo?.viewableThumbnailUrl ?: "",
-//                    result = "WARNING",
-//                    similarImages = listOf(
-//                        "https://via.placeholder.com/150/FF0000/FFFFFF?Text=Similar+1",
-//                        "https://via.placeholder.com/150/0000FF/FFFFFF?Text=Similar+2",
-//                        "https://via.placeholder.com/150/00FF00/FFFFFF?Text=Similar+3"
-//                    )
-//                )
-//            )
-//            _uiState.update {
-//                it.copy(
-//                    isAnalyzingImage = false,
-//                    imageAnalysisResult = dummyResults
-//                )
-//            }
-//        }
-//    }
-
+    /**
+     * AI 이미지 분석 요청 및 결과 처리
+     */
     fun startImageAnalysis() {
         // ⚠️ ImageAnalysisResult가 null이 아닌 경우, 이미 분석이 완료되었거나 진행 중인 경우를 막습니다.
         if (_uiState.value.isAnalyzingImage || _uiState.value.imageAnalysisResult != null) return
@@ -366,8 +404,6 @@ class ChatRoomViewModel @Inject constructor(
                     is ApiResult.Success -> {
                         // DTO를 UI 상태에서 사용할 Domain Model로 변환
                         val domainResults = result.data.data?.toDomainModel()
-
-//                            result.data.toDomainModel()
 
                         _uiState.update {
                             it.copy(
@@ -409,7 +445,8 @@ class ChatRoomViewModel @Inject constructor(
     }
 
     fun closeWarningBanner() {
-        _uiState.update { it.copy(fraudWarningMessage = null) }
+        // 경고 배너를 닫을 때 fraudDetectionResult를 null로 설정
+        _uiState.update { it.copy(fraudDetectionResult = null) }
     }
 
     private fun markMessagesAsRead() {
@@ -427,4 +464,3 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 }
-

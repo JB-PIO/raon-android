@@ -59,6 +59,7 @@ import com.example.raon.features.item.ui.list.ItemListScreen
 import com.example.raon.features.user.ui.ProfileScreen
 import com.example.raon.features.user.ui.ProfileTopAppBar
 import com.example.raon.navigation.NavItem
+import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
 
 // comp 자동 완성 키워드
@@ -148,18 +149,25 @@ fun MainView(
 
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            // 선택된 상태의 아이콘 색상 (Text 색상도 함께 적용됨)
-                            selectedIconColor = Color.Red,
-                            // 선택되지 않은 상태의 아이콘 색상
-                            unselectedIconColor = Color.Gray,
-                            // 선택된 상태의 배경색
-                            indicatorColor = BrandYellow,
-//                            indicatorColor = Color.Yellow.copy(alpha = 0.2f),
+                            // 선택된 상태의 아이콘 색상:
+                            // 밝은 노란색(BrandYellow) 배경과 대비가 가장 좋은 BrandDarkText 사용
+                            selectedIconColor = BrandDarkText,
 
-                            // 선택된 상태의 텍스트 색상 (label에 적용됨)
-                            selectedTextColor = Color.Red,
-                            // 선택되지 않은 상태의 텍스트 색상
-                            unselectedTextColor = Color.Gray
+                            // 선택되지 않은 상태의 아이콘 색상:
+                            // 너무 튀지 않으면서 식별은 가능한 중간 톤의 회색
+                            unselectedIconColor = Color(0xFF9E9E9E), // Medium Gray
+
+                            // 선택된 상태의 배경색:
+                            // 브랜드 컬러를 사용하여 현재 활성화된 탭을 강조
+                            indicatorColor = BrandYellow,
+
+                            // 선택된 상태의 텍스트 색상:
+                            // 아이콘과 동일하게 BrandDarkText를 사용하여 가독성 확보
+                            selectedTextColor = BrandDarkText,
+
+                            // 선택되지 않은 상태의 텍스트 색상:
+                            // 아이콘과 동일한 회색으로 통일감 부여
+                            unselectedTextColor = Color(0xFF9E9E9E) // Medium Gray
                         )
                     )
                 }

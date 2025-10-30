@@ -187,12 +187,16 @@ fun ChatRoomScreen(
                         MessageBubble(message = message)
                     }
                 }
-                AnimatedVisibility(visible = uiState.fraudWarningMessage != null) {
+
+                // ▼▼▼ [수정된 부분] 경고 배너 표시 조건 및 호출 파라미터 변경 ▼▼▼
+                AnimatedVisibility(visible = uiState.fraudDetectionResult != null) {
                     FraudWarningBanner(
-                        message = uiState.fraudWarningMessage.orEmpty(),
+                        result = uiState.fraudDetectionResult!!, // FraudDetectionResult 객체 전달
                         onClose = { viewModel.closeWarningBanner() }
                     )
                 }
+                // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
             }
 
             AnimatedVisibility(
@@ -525,26 +529,38 @@ fun MessageInput(
     }
 }
 
+// ▼▼▼ [수정된 부분] 파라미터와 내부 로직을 FraudDetectionResult 기반으로 변경 ▼▼▼
 @Composable
 private fun FraudWarningBanner(
-    message: String,
+    result: FraudDetectionResult, // FraudDetectionResult 객체를 받도록 변경
     onClose: () -> Unit
 ) {
+    // 1. 상태 레벨에 따른 시각적 요소 결정
+    val (backgroundColor, icon, iconTint) = when (result.level) {
+        "SAFE" -> Triple(Color(0xFFE8F5E9), Icons.Default.CheckCircle, Color(0xFF2E7D32)) // 연한 녹색
+        "WARNING" -> Triple(Color(0xFFFFF3E0), Icons.Default.Warning, Color(0xFFEF6C00)) // 연한 주황색
+        else -> Triple(
+            Color(0xFFFFEBEE),
+            Icons.Default.Warning,
+            Color(0xFFC62828)
+        ) // DANGER 및 기타 (연한 빨간색)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFFFF3E0))
+            .background(backgroundColor) // 동적으로 배경색 변경
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = "경고",
-            tint = Color(0xFFE65100)
+            imageVector = icon, // 동적으로 아이콘 변경
+            contentDescription = "분석 결과",
+            tint = iconTint // 동적으로 아이콘 색상 변경
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = message,
+            text = result.message, // 결과 메시지 사용
             modifier = Modifier.weight(1f),
             color = Color(0xFF4E342E),
             fontSize = 13.sp,
