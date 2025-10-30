@@ -9,7 +9,7 @@ import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first // 👈 'first' import 추가
+import kotlinx.coroutines.flow.collectLatest // 👈 'first' 대신 'collectLatest' import
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,7 +29,7 @@ data class ItemListUiState(
     val isRefreshing: Boolean = false, // 새로고침 상
     val itemsImageUrl: String = "",
 
-    val locationId: Int? = null,
+    val locationId: Int? = null, // Int? 타입 유지
 
     val locationName: String = "위치 정보 없음", // 현재 위치 이름 (UI 표시용)
     val availableLocations: List<LocationUiModel> = emptyList() // 드롭다운 목록
@@ -45,30 +45,55 @@ class ItemListViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     init {
-        // ViewModel이 시작될 때 DataStore에서 위치 정보를 먼저 가져옵니다.
+        // ViewModel이 시작될 때 DataStore 구독을 시작합니다.
+        observeUserProfileAndLoadItems()
+    }
+
+    /**
+     * DataStore의 유저 프로필(위치)을 "구독(Observe)"합니다.
+     * 유저 정보가 (MainViewModel에 의해) 갱신되면, 이 함수가 자동으로 다시 실행되어
+     * 위치를 업데이트하고 아이템 목록을 새로고침합니다.
+     */
+    private fun observeUserProfileAndLoadItems() {
         viewModelScope.launch {
-            // getUserProfile() Flow에서 첫 번째 값(User 객체)을 가져옵니다.
-            val userProfile = userRepository.getUserProfile().first()
+            // .first() 대신 .collectLatest를 사용해 DataStore의 변경사항을 계속 "구독"합니다.
+            userRepository.getUserProfile().collectLatest { userProfile ->
 
+                if (userProfile != null) {
+                    // [흐름 1] DataStore에 유저 정보가 로드됨 (또는 갱신됨)
+                    val newLocationId = userProfile.locationId
+                    val newLocationName = userProfile.address
+                    val currentLocationIdInUi = _uiState.value.locationId
 
-            // userProfile로 필요한 데이터를 가져온 후에 첫 아이템 로드를 시작
-            if (userProfile != null) {
-                val userLocationId = userProfile?.locationId // User 객체에서 locationId를 추출합니다.
+                    // UI State를 새 위치 정보로 업데이트합니다.
+                    _uiState.update {
+                        it.copy(
+                            locationId = newLocationId,
+                            locationName = newLocationName
+                        )
+                    }
 
-                // 가져온 locationId로 UiState를 업데이트합니다.
-                _uiState.update { it.copy(locationId = userLocationId) }
+                    //  중요: UI가 알던 위치(null 또는 옛날 위치)와
+                    //    DataStore의 새 위치가 다른 경우에만 'refresh'를 호출합니다.
+                    if (currentLocationIdInUi != newLocationId) {
+                        Log.d("ItemListViewModel", "✅ 새 위치($newLocationId) 수신. 아이템 목록을 새로고칩니다.")
+                        refresh() // 새 위치로 목록 새로고침
+                    } else {
+                        Log.d("ItemListViewModel", "✅ 위치($newLocationId) 정보 재확인 (변경 없음).")
+                    }
 
-
-
-                Log.d(
-                    "ItemListViewModel",
-                    "Initial locationId set to: $userLocationId. Loading items."
-                )
-                loadItems() // 첫 화면 데이터 가져오기
-            } else {
-                // 위치 정보가 없는 경우 (ex: 신규 유저)
-                Log.w("ItemListViewModel", "locationId is null. User may need to set location.")
-                _uiState.update { it.copy(errorMessage = "위치 정보가 없습니다. 프로필에서 위치를 설정해주세요.") }
+                } else {
+                    // [흐름 2] DataStore가 아직 비어있음 (MainViewModel이 로딩 중)
+                    Log.w("ItemListViewModel", "⏳ 위치 정보 대기 중... (user is null)")
+                    _uiState.update {
+                        it.copy(
+                            locationId = null,
+                            locationName = "위치 정보 없음",
+                            isLoading = true, // [수정] 로딩 시작을 알림
+                            errorMessage = "위치 정보를 불러오는 중입니다..."
+                        )
+                    }
+                }
             }
         }
     }
@@ -77,11 +102,13 @@ class ItemListViewModel @Inject constructor(
     // 새로고침 함수
     fun refresh() {
         viewModelScope.launch {
-            // 현재 state의 locationId를 가져옵니다.
+            // 현재 state의 locationId를 가져옵니다. (observe~ 함수에 의해 갱신된 값)
             val currentLocationId = _uiState.value.locationId
+            Log.d("ItemListViewModel", "refresh() 호출됨. LocationId: $currentLocationId")
 
             // 📍 위치 정보가 없으면 새로고침을 중단합니다.
             if (currentLocationId == null) {
+                Log.w("ItemListViewModel", "위치 정보가 없어 refresh 중단.")
                 _uiState.update { it.copy(isRefreshing = false, errorMessage = "위치 정보가 없습니다.") }
                 return@launch
             }
@@ -97,11 +124,12 @@ class ItemListViewModel @Inject constructor(
                 // 'getItemsWithViewableUrls'에 'locationId' 파라미터 전달
                 val refreshedItems = itemRepository.getItemsWithViewableUrls(
                     page = 0,
-                    locationId = currentLocationId // locationId 전달
+                    locationId = currentLocationId // locationId 전달 (Int로 자동 형변환)
                 )
                 _uiState.update {
                     it.copy(
                         isRefreshing = false, // 새로고침 완료
+                        isLoading = false,    // 👈 ⭐️ [버그 수정] 로딩 상태 false로 변경
                         items = refreshedItems,
                         currentPage = 1, // 다음 페이지는 1
                         errorMessage = null
@@ -111,6 +139,7 @@ class ItemListViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isRefreshing = false, // 새로고침 실패
+                        isLoading = false,    // 👈 ⭐️ [버그 수정] 로딩 상태 false로 변경
                         errorMessage = "데이터를 새로고침하는데 실패했습니다."
                     )
                 }
@@ -120,8 +149,8 @@ class ItemListViewModel @Inject constructor(
 
 
     // loadItems (더 로드하기 - Pagination)
-    private fun loadItems() {
-        if (_uiState.value.isLoading) return
+    fun loadMoreItems() {
+        if (_uiState.value.isLoading || _uiState.value.isRefreshing) return
 
         viewModelScope.launch {
             val currentPage = _uiState.value.currentPage
@@ -129,14 +158,14 @@ class ItemListViewModel @Inject constructor(
 
             // 📍 위치 정보가 없으면 로드를 중단합니다.
             if (currentLocationId == null) {
-                Log.w("ItemListViewModel", "Skipping loadItems, locationId is null.")
+                Log.w("ItemListViewModel", "Skipping loadMoreItems, locationId is null.")
                 _uiState.update { it.copy(isLoading = false) } // 로딩 상태 해제
                 return@launch
             }
 
             Log.d(
                 "ItemListViewModel",
-                "Start loading items for page: $currentPage with locationId: $currentLocationId"
+                "Start loading more items for page: $currentPage with locationId: $currentLocationId"
             )
 
             _uiState.update { it.copy(isLoading = true) }
@@ -145,18 +174,18 @@ class ItemListViewModel @Inject constructor(
                 val newItemsUiModel =
                     itemRepository.getItemsWithViewableUrls(
                         page = currentPage,
-                        locationId = currentLocationId // locationId 전달
+                        locationId = currentLocationId // locationId 전달 (Int로 자동 형변환)
                     )
 
                 Log.d(
                     "ItemListViewModel",
-                    "Successfully loaded ${newItemsUiModel.size} items: $newItemsUiModel"
+                    "Successfully loaded ${newItemsUiModel.size} more items: $newItemsUiModel"
                 )
 
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        items = it.items + newItemsUiModel,
+                        items = it.items + newItemsUiModel, // 기존 목록에 새 목록 추가
                         currentPage = it.currentPage + 1,
                         itemsImageUrl = it.itemsImageUrl
                     )

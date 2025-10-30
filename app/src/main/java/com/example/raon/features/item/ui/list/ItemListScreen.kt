@@ -65,11 +65,11 @@ fun ItemListScreen(
     Column(modifier = modifier.fillMaxSize()) {
 
         // TopAppBar 호출 시 onLocationClick 전달
-        HomeScreenTopAppBar(
-            address = uiState.locationName, // ViewModel의 현재 주소
-            onNavigateToSearch = onNavigateToSearch,
-            onLocationClick = onLocationClick // MainView로 클릭 이벤트 전달
-        )
+//        HomeScreenTopAppBar(
+//            address = uiState.locationName, // ViewModel의 현재 주소
+//            onNavigateToSearch = onNavigateToSearch,
+//            onLocationClick = onLocationClick // MainView로 클릭 이벤트 전달
+//        )
 
         // Refresh 기능
         PullToRefreshBox(
@@ -123,7 +123,7 @@ fun HomeScreenTopAppBar(
             Box {
                 // 기존 주소 표시 UI (클릭 가능하게)
                 Row(
-                    modifier = Modifier.clickable(onClick = onLocationClick), // 👈 클릭 시 메뉴 열기 이벤트 호출
+                    modifier = Modifier.clickable(onClick = onLocationClick), // 클릭 시 메뉴 열기 이벤트 호출
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
