@@ -45,8 +45,14 @@ class ItemRepositoryImpl @Inject constructor(
     private val S3_BASE_URL0 = "https://raon-market-images-prod.s3.ap-northeast-2.amazonaws.com/"
 
     // itemList 가져오기
-    override suspend fun getItems(page: Int): List<ItemDto> {
-        val response = itemApiService.getItems(page = page)
+    override suspend fun getItems(
+        page: Int,
+        locationId: Int,
+    ): List<ItemDto> {
+        val response = itemApiService.getItems(
+            page = page,
+            locationId = locationId
+        )
         if (response.isSuccessful) {
             return response.body()?.data?.items ?: emptyList()
         } else {
@@ -55,9 +61,15 @@ class ItemRepositoryImpl @Inject constructor(
     }
 
     // 가져온 itemList에서 이미지 키값으로 presignedURL 가져와서 이미지 받아오기
-    override suspend fun getItemsWithViewableUrls(page: Int): List<ItemUiModel> {
+    override suspend fun getItemsWithViewableUrls(
+        page: Int,
+        locationId: Int,
+    ): List<ItemUiModel> {
         // 1. 메인 서버에서 아이템 목록(DTO)을 가져오기
-        val itemsDto = getItems(page)
+        val itemsDto = getItems(
+            page = page,
+            locationId = locationId
+        )
 
         // 2. 각 아이템의 thumbnail(객체 키)로 Presigned URL을 병렬로 요청
         val itemsWithPresignedUrl = coroutineScope {

@@ -9,6 +9,7 @@ import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.repository.ImageStorageRepository
 import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
 import com.example.raon.features.chat.domain.repository.ChatRepository
+import com.example.raon.features.item.ui.list.LocationUiModel
 import com.example.raon.features.user.domain.model.User
 import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +33,10 @@ data class MainUiState(
     val isLoading: Boolean = true,
     // [1. Presigned URL을 저장할 변수 추가]
     val viewableProfileImageUrl: String? = null,
+
+
+    val locationName: String = "위치 정보 없음", // 현재 위치 이름 (UI 표시용)
+    val availableLocations: List<LocationUiModel> = emptyList() // 드롭다운 목록
 )
 
 @HiltViewModel

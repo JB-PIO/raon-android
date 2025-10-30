@@ -129,9 +129,9 @@ object NetworkModule {
         return OkHttpClient.Builder()
 
             //  타임아웃 3줄이 추가
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(360, TimeUnit.SECONDS)
+            .readTimeout(360, TimeUnit.SECONDS)
+            .writeTimeout(360, TimeUnit.SECONDS)
 
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY

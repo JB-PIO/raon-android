@@ -124,9 +124,11 @@ fun AddItemScreen(
                         uiState.isPriceValid &&
                         (if (isEditing) (uiState.existingImageUrls.isNotEmpty() || uiState.seletedImages.isNotEmpty()) else uiState.seletedImages.isNotEmpty()) &&
                         uiState.isCategoryValid &&
-                        uiState.description.isNotEmpty() &&
-                        !uiState.isLoading && // 1. 로딩 중이 아닐 때
-                        !uiState.isSuccess, // ✨ 2. 이미 성공한 상태가 아닐 때
+//                        uiState.description.isNotEmpty() &&
+//                        !uiState.isLoading && // 1. 로딩 중이 아닐 때
+//                        !uiState.isSuccess, // 2. 이미 성공한 상태가 아닐 때
+                        uiState.description.isNotEmpty(),
+
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()

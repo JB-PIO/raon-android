@@ -30,3 +30,15 @@ data class ImageAnalysisResult(
     @SerializedName("similarImageUrls")
     val similarImageUrls: List<String>? // nullable
 )
+
+
+// ImageAnalysisResponseDto의 확장 함수로 정의
+fun ImageAnalysisResponseDto.toDomainModel(): List<com.example.raon.features.chat.ui.ImageAnalysisResult> {
+    return this.results.map { dtoResult ->
+        com.example.raon.features.chat.ui.ImageAnalysisResult(
+            imageUrl = dtoResult.imageUrl,
+            result = dtoResult.result,
+            similarImages = dtoResult.similarImageUrls ?: emptyList() // null일 경우 빈 리스트로 처리
+        )
+    }
+}

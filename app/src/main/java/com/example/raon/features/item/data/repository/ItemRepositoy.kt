@@ -17,10 +17,16 @@ interface ItemRepository {
 
 
     // --- Presigned URL을 포함한 UI 모델을 반환하는 새 함수 추가 ---
-    suspend fun getItemsWithViewableUrls(page: Int): List<ItemUiModel>
+    suspend fun getItemsWithViewableUrls(
+        page: Int,
+        locationId: Int,
+    ): List<ItemUiModel>
 
     // 아이템 목록 조회. 실패 시 예외를 던짐
-    suspend fun getItems(page: Int): List<ItemDto> // 이름 및 반환 타입 변경
+    suspend fun getItems(
+        page: Int,
+        locationId: Int,
+    ): List<ItemDto> // 이름 및 반환 타입 변경
 
     // [ New Item 등록 }
     suspend fun postNewItem(

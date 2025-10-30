@@ -9,9 +9,17 @@ import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first // 👈 'first' import 추가
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+
+// (파일 상단 또는 별도 파일에 추가)
+data class LocationUiModel(
+    val id: Int,
+    val name: String
+)
 
 data class ItemListUiState(
     val items: List<ItemUiModel> = emptyList(),
@@ -19,7 +27,12 @@ data class ItemListUiState(
     val errorMessage: String? = null,
     val currentPage: Int = 0,
     val isRefreshing: Boolean = false, // 새로고침 상
-    val itemsImageUrl: String = ""
+    val itemsImageUrl: String = "",
+
+    val locationId: Int? = null,
+
+    val locationName: String = "위치 정보 없음", // 현재 위치 이름 (UI 표시용)
+    val availableLocations: List<LocationUiModel> = emptyList() // 드롭다운 목록
 )
 
 @HiltViewModel
@@ -32,12 +45,47 @@ class ItemListViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     init {
-        loadItems() // ViewModel 시작하자마자 첫 화면 데이터 가져오기
+        // ViewModel이 시작될 때 DataStore에서 위치 정보를 먼저 가져옵니다.
+        viewModelScope.launch {
+            // getUserProfile() Flow에서 첫 번째 값(User 객체)을 가져옵니다.
+            val userProfile = userRepository.getUserProfile().first()
+
+
+            // userProfile로 필요한 데이터를 가져온 후에 첫 아이템 로드를 시작
+            if (userProfile != null) {
+                val userLocationId = userProfile?.locationId // User 객체에서 locationId를 추출합니다.
+
+                // 가져온 locationId로 UiState를 업데이트합니다.
+                _uiState.update { it.copy(locationId = userLocationId) }
+
+
+
+                Log.d(
+                    "ItemListViewModel",
+                    "Initial locationId set to: $userLocationId. Loading items."
+                )
+                loadItems() // 첫 화면 데이터 가져오기
+            } else {
+                // 위치 정보가 없는 경우 (ex: 신규 유저)
+                Log.w("ItemListViewModel", "locationId is null. User may need to set location.")
+                _uiState.update { it.copy(errorMessage = "위치 정보가 없습니다. 프로필에서 위치를 설정해주세요.") }
+            }
+        }
     }
+
 
     // 새로고침 함수
     fun refresh() {
         viewModelScope.launch {
+            // 현재 state의 locationId를 가져옵니다.
+            val currentLocationId = _uiState.value.locationId
+
+            // 📍 위치 정보가 없으면 새로고침을 중단합니다.
+            if (currentLocationId == null) {
+                _uiState.update { it.copy(isRefreshing = false, errorMessage = "위치 정보가 없습니다.") }
+                return@launch
+            }
+
             _uiState.update {
                 it.copy(
                     isRefreshing = true, // 새로고침 시작
@@ -46,8 +94,11 @@ class ItemListViewModel @Inject constructor(
                 )
             }
             try {
-                // 첫 페이지(page = 0) 데이터를 다시 불러오기
-                val refreshedItems = itemRepository.getItemsWithViewableUrls(page = 0)
+                // 'getItemsWithViewableUrls'에 'locationId' 파라미터 전달
+                val refreshedItems = itemRepository.getItemsWithViewableUrls(
+                    page = 0,
+                    locationId = currentLocationId // locationId 전달
+                )
                 _uiState.update {
                     it.copy(
                         isRefreshing = false, // 새로고침 완료
@@ -68,26 +119,35 @@ class ItemListViewModel @Inject constructor(
     }
 
 
+    // loadItems (더 로드하기 - Pagination)
     private fun loadItems() {
         if (_uiState.value.isLoading) return
 
         viewModelScope.launch {
+            val currentPage = _uiState.value.currentPage
+            val currentLocationId = _uiState.value.locationId // 현재 state의 locationId 사용
 
-            // 2. 데이터 로딩을 '시작'하는 시점을 알려주는 로그
+            // 📍 위치 정보가 없으면 로드를 중단합니다.
+            if (currentLocationId == null) {
+                Log.w("ItemListViewModel", "Skipping loadItems, locationId is null.")
+                _uiState.update { it.copy(isLoading = false) } // 로딩 상태 해제
+                return@launch
+            }
+
             Log.d(
                 "ItemListViewModel",
-                "Start loading items for page: ${_uiState.value.currentPage}"
+                "Start loading items for page: $currentPage with locationId: $currentLocationId"
             )
 
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Repository의 새 함수를 호출하여 Presigned URL까지 적용된 최종 UI 모델 목록을 바로 받습니다.
+                // Repository 함수에 'locationId' 파라미터 전달
                 val newItemsUiModel =
-                    itemRepository.getItemsWithViewableUrls(page = _uiState.value.currentPage)
+                    itemRepository.getItemsWithViewableUrls(
+                        page = currentPage,
+                        locationId = currentLocationId // locationId 전달
+                    )
 
-
-                //  3. Repository로부터 데이터를 '성공적으로 받아왔는지' 확인하는 가장 중요한 로그
-                //    이 로그를 통해 실제로 어떤 데이터가 들어왔는지 확인할 수 있습니다.
                 Log.d(
                     "ItemListViewModel",
                     "Successfully loaded ${newItemsUiModel.size} items: $newItemsUiModel"
@@ -106,6 +166,27 @@ class ItemListViewModel @Inject constructor(
                     it.copy(isLoading = false, errorMessage = "데이터를 불러오는데 실패했습니다.")
                 }
             }
+        }
+    }
+
+
+    // --- [함수 추가] ---
+    // UI(드롭다운)에서 새 주소를 선택했을 때 호출될 함수
+    fun onAddressSelected(selectedLocation: LocationUiModel) {
+        viewModelScope.launch {
+            // 1. (선택 사항) UserRepository를 통해 DataStore 등에 "기본 위치"를 업데이트
+            //    userRepository.updateCurrentLocation(selectedLocation.id) // (이런 함수가 있다고 가정)
+
+            // 2. UiState를 새 위치로 업데이트
+            _uiState.update {
+                it.copy(
+                    locationId = selectedLocation.id,
+                    locationName = selectedLocation.name
+                )
+            }
+
+            // 3. 새 위치로 데이터 새로고침
+            refresh()
         }
     }
 }

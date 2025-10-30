@@ -26,7 +26,6 @@ import retrofit2.http.Query
 interface ItemApiService {
 
     // ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ 게시글 리스트, 게시글 CRUD ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
-
     // [ 게시글 등록 API ]
     @POST("api/v1/products")
     suspend fun postItem(
@@ -48,6 +47,11 @@ interface ItemApiService {
     suspend fun getItems(
         // 이름 변경
         @Query("page") page: Int,
+
+
+        @Query("locationId") locationId: Int?,  // 지역 관련 데이터만 가져오기
+
+
 //        @Query("size") size: Int = 20
     ): Response<ItemListResponse>
 

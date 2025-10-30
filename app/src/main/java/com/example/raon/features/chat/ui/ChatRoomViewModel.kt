@@ -15,6 +15,7 @@ import com.example.raon.features.chat.data.remote.dto.ChatMessageDto
 import com.example.raon.features.chat.data.remote.dto.UserInChatDetailDto
 import com.example.raon.features.chat.data.remote.dto.ai.FraudDetectionRequestDto
 import com.example.raon.features.chat.data.remote.dto.ai.MessageInFraudRequestDto
+import com.example.raon.features.chat.data.remote.dto.ai.toDomainModel
 import com.example.raon.features.chat.data.remote.dto.toDomainModel
 import com.example.raon.features.chat.domain.model.ChatMessage
 import com.example.raon.features.chat.domain.repository.ChatRepository
@@ -22,7 +23,6 @@ import com.example.raon.features.user.domain.repository.UserRepository
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
@@ -32,6 +32,12 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
 
+// 데이터 클래스는 변경 없음
+data class ImageAnalysisResult(
+    val imageUrl: String,
+    val result: String,
+    val similarImages: List<String> = emptyList()
+)
 
 // 화면 상단 바 상품 정보 data class
 data class ChatProductInfo(
@@ -317,29 +323,83 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
+//    fun startImageAnalysis() {
+//        if (_uiState.value.isAnalyzingImage || _uiState.value.imageAnalysisResult != null) return
+//
+//        viewModelScope.launch {
+//            _uiState.update { it.copy(isAnalyzingImage = true) }
+//            delay(2500)
+//
+//            val dummyResults = listOf(
+//                ImageAnalysisResult(
+//                    imageUrl = _uiState.value.productInfo?.viewableThumbnailUrl ?: "",
+//                    result = "WARNING",
+//                    similarImages = listOf(
+//                        "https://via.placeholder.com/150/FF0000/FFFFFF?Text=Similar+1",
+//                        "https://via.placeholder.com/150/0000FF/FFFFFF?Text=Similar+2",
+//                        "https://via.placeholder.com/150/00FF00/FFFFFF?Text=Similar+3"
+//                    )
+//                )
+//            )
+//            _uiState.update {
+//                it.copy(
+//                    isAnalyzingImage = false,
+//                    imageAnalysisResult = dummyResults
+//                )
+//            }
+//        }
+//    }
+
     fun startImageAnalysis() {
+        // ⚠️ ImageAnalysisResult가 null이 아닌 경우, 이미 분석이 완료되었거나 진행 중인 경우를 막습니다.
         if (_uiState.value.isAnalyzingImage || _uiState.value.imageAnalysisResult != null) return
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAnalyzingImage = true) }
-            delay(2500)
+        val currentChatRoomId = chatRoomId
+        if (currentChatRoomId == -1L) return // 유효하지 않은 채팅방 ID
 
-            val dummyResults = listOf(
-                ImageAnalysisResult(
-                    imageUrl = _uiState.value.productInfo?.viewableThumbnailUrl ?: "",
-                    result = "WARNING",
-                    similarImages = listOf(
-                        "https://via.placeholder.com/150/FF0000/FFFFFF?Text=Similar+1",
-                        "https://via.placeholder.com/150/0000FF/FFFFFF?Text=Similar+2",
-                        "https://via.placeholder.com/150/00FF00/FFFFFF?Text=Similar+3"
-                    )
-                )
-            )
-            _uiState.update {
-                it.copy(
-                    isAnalyzingImage = false,
-                    imageAnalysisResult = dummyResults
-                )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAnalyzingImage = true, errorMessage = null) }
+
+            try {
+                // ▼▼▼ [수정된 부분] Repository의 analyzeImages 함수 호출 ▼▼▼
+                when (val result = chatRepository.analyzeImages(currentChatRoomId)) {
+                    is ApiResult.Success -> {
+                        // DTO를 UI 상태에서 사용할 Domain Model로 변환
+                        val domainResults = result.data.data?.toDomainModel()
+
+//                            result.data.toDomainModel()
+
+                        _uiState.update {
+                            it.copy(
+                                isAnalyzingImage = false,
+                                imageAnalysisResult = domainResults
+                            )
+                        }
+                        Log.d("ChatViewModel", "✅ Image analysis successful: $domainResults")
+                    }
+
+                    is ApiResult.Error -> {
+                        val errorMsg = "이미지 분석 오류 (API: ${result.code})"
+                        Log.e("ChatViewModel", "❌ Image analysis failed: ${result.code}")
+                        _uiState.update {
+                            it.copy(isAnalyzingImage = false, errorMessage = errorMsg)
+                        }
+                    }
+
+                    is ApiResult.Exception -> {
+                        val errorMsg = "이미지 분석 중 네트워크 오류"
+                        Log.e("ChatViewModel", "❌ Image analysis exception", result.e)
+                        _uiState.update {
+                            it.copy(isAnalyzingImage = false, errorMessage = errorMsg)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                val errorMsg = "이미지 분석 중 알 수 없는 오류 발생"
+                Log.e("ChatViewModel", "❌ Unexpected error during image analysis", e)
+                _uiState.update {
+                    it.copy(isAnalyzingImage = false, errorMessage = errorMsg)
+                }
             }
         }
     }
@@ -367,3 +427,4 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 }
+

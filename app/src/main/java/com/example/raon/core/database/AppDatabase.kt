@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import com.example.raon.features.category.data.local.CategoryDao
 import com.example.raon.features.category.data.local.CategoryEntity
 
+// room에서 사
 @Database(
     entities = [CategoryEntity::class], // 1️⃣ 이 데이터베이스가 관리할 테이블(Entity) 목록
     version = 1,                         // 2️⃣ 데이터베이스 버전

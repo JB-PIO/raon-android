@@ -29,11 +29,11 @@ class AddItemViewModel @Inject constructor(
     init {
         // 수정 모드인지 확인하고, 맞으면 기존 데이터를 불러옵니다.
         if (itemId != null && itemId != -1) { // -1은 NavArgument의 기본값이므로 제외
-            // 👇 [로그 추가 1] ViewModel이 생성될 때 어떤 모드인지 확인합니다.
-            Log.d("AddItemViewModel", "✅ ViewModel 초기화: 수정 모드입니다. Item ID: $itemId")
+            //  [로그 추가 1] ViewModel이 생성될 때 어떤 모드인지 확인합니다.
+            Log.d("AddItemViewModel", " ViewModel 초기화: 수정 모드입니다. Item ID: $itemId")
             loadItemForEditing(itemId)
         } else {
-            // 👇 [로그 추가 1] 등록 모드일 때도 로그를 남깁니다.
+            //  [로그 추가 1] 등록 모드일 때도 로그를 남깁니다.
             Log.d("AddItemViewModel", " ViewModel 초기화: 새 상품 등록 모드입니다.")
         }
     }
@@ -149,15 +149,15 @@ class AddItemViewModel @Inject constructor(
      * '등록 완료' 또는 '수정 완료' 버튼 클릭 시 호출되는 함수
      */
     private fun submitItem() {
-        // ✨👇 수정된 부분: 중복 실행 방지 가드 강화
+        // 수정된 부분: 중복 실행 방지 가드 강화
         // 1. 로딩 중이거나 2. 이미 성공했다면 함수를 즉시 종료
-        if (_uiState.value.isLoading || _uiState.value.isSuccess) {
-            Log.d(
-                "AddItemViewModel",
-                "⚠️ 중복 제출 시도 감지 (isLoading=${_uiState.value.isLoading}, isSuccess=${_uiState.value.isSuccess}). 요청을 무시합니다."
-            )
-            return
-        }
+//        if (_uiState.value.isLoading || _uiState.value.isSuccess) {
+//            Log.d(
+//                "AddItemViewModel",
+//                " 중복 제출 시도 감지 (isLoading=${_uiState.value.isLoading}, isSuccess=${_uiState.value.isSuccess}). 요청을 무시합니다."
+//            )
+//            return
+//        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }

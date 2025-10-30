@@ -28,12 +28,19 @@ import com.example.raon.features.search.ui.SearchInputScreen
 import com.example.raon.features.search.ui.SearchResultScreen
 import com.example.raon.features.user.ui.ProfileEditScreen
 
+//import com.yourpackage.raon.features.itemlist.LocationSelectorScreen
+
 @Composable
 fun AppNavigation(
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "auth_graph") {
+
+        composable("testUI") {
+//            LocationSelectorScreen()
+        }
+
 
         composable(
             "category?parentId={parentId}&path={path}",

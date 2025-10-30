@@ -1,11 +1,22 @@
 package com.example.raon.features.main.ui
 
-//import com.example.raon.features.item.ui.list.HomeScreen
-//import com.example.raon.features.chat.ui.ChatListTopAppBar
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
@@ -13,9 +24,12 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,8 +39,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -42,6 +59,7 @@ import com.example.raon.features.item.ui.list.ItemListScreen
 import com.example.raon.features.user.ui.ProfileScreen
 import com.example.raon.features.user.ui.ProfileTopAppBar
 import com.example.raon.navigation.NavItem
+import com.example.raon.ui.theme.BrandYellow
 
 // comp 자동 완성 키워드
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,36 +71,17 @@ fun MainView(
 ) {
 
     // 구독 시작 코드
-    // 이 코드가 실행되는 순간, ViewModel의 userProfile Flow가 활성화
     val userProfile by mainViewModel.userProfile.collectAsStateWithLifecycle()
-
-//    val mainaddress = userProfile.address.split("").last()
-
     val mainaddress = userProfile?.address?.split(" ")?.lastOrNull()    // -> 풀 주소의 마지막 동만 가져오기
 
-
     val mainUiState by mainViewModel.uiState.collectAsState()
-    // **핵심 변경 1: MainView 내부의 바텀 내비게이션 탭 관리를 위한 NavController 생성**
     val bottomNavController = rememberNavController()
 
-
-    // 채팅방에서 돌아오면 안읽은 채팅 아이콘 사라짐
-    // [ 채팅방에서 돌아온 결과를 처리하기 위한 LaunchedEffect ]
-    // MainView가 살아있는 동안 계속 결과를 감시합니다.
-//    val navBackStackEntry by navController.currentBackStackEntryAsState()
-//    LaunchedEffect(navBackStackEntry) {
-//        // "read_chat_room_id" 라는 키로 결과가 왔는지 확인합니다.
-//        val readChatId = navBackStackEntry?.savedStateHandle?.get<Long>("read_chat_room_id")
-//        if (readChatId != null && readChatId != -1L) {
-//            // 결과가 있다면 ViewModel의 함수를 호출하여 UI 상태를 업데이트합니다.
-//            mainViewModel.markChatRoomAsRead(readChatId)
-//            // 처리가 끝난 결과는 반드시 제거하여, 화면이 다시 그려질 때 또 실행되지 않도록 합니다.
-//            navBackStackEntry?.savedStateHandle?.remove<Long>("read_chat_room_id")
-//        }
-//    }
+    // [추가] MainView에서 드롭다운 메뉴 열림 상태를 관리합니다. (화면 전체 그림자용)
+    var isLocationMenuOpen by remember { mutableStateOf(false) }
 
 
-    // 불변 List 자료구조 사용 - 굳이 수정될 이유가 없기 때문
+    // 불변 List 자료구조 사용
     val navItemList = listOf(
         NavItem("홈", Icons.Default.Home, "home"),
         NavItem("검색", Icons.Default.Search, "searchInput"),
@@ -91,8 +90,6 @@ fun MainView(
         NavItem("프로필", Icons.Default.Person, "profile"),
     )
 
-    // import getValue 해주기
-    // 어떤 네비게이션 바를 선택했는지를 담은 변수
     var selectedIndex by remember {
         mutableStateOf(0)
     }
@@ -100,14 +97,15 @@ fun MainView(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            // **핵심 변경 2: topBar는 bottomNavController의 현재 경로를 관찰하여 TopAppBar를 변경합니다.**
             val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
             val currentRoute = navBackStackEntry?.destination?.route
 
             when (currentRoute) {
                 "home" -> HomeScreenTopAppBar(
-                    { navController.navigate("searchInput") {} },
-                    address = mainaddress ?: "내 주소"
+                    onNavigateToSearch = { navController.navigate("searchInput") {} },
+                    address = mainaddress ?: "내 주소",
+                    // [수정] MainView의 상태를 변경하는 이벤트를 전달하여 메뉴 열기
+                    onLocationClick = { isLocationMenuOpen = true },
                 )
 
                 "chatRoomList" -> ChatListTopAppBar(navController)
@@ -119,39 +117,28 @@ fun MainView(
                 containerColor = Color.White,
                 modifier = Modifier.height(115.dp)
             ) {
-                // **핵심 변경 3: bottomNavController의 현재 경로를 관찰하여 선택된 탭을 강조합니다.**
                 val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
                 navItemList.forEach { navItem ->
                     NavigationBarItem(
-                        // 현재 navItem의 route와 bottomNavController의 currentRoute가 일치하면 선택됨
-
                         selected = currentRoute == navItem.route,
                         onClick = {
 
                             if (navItem.route == "addItem") {
-                                // '등록' 탭을 눌렀을 때, 최상위 navController를 사용하여 새로운 화면으로 이동
                                 navController.navigate("addItem")
                             } else if (navItem.route == "searchInput") {
                                 navController.navigate("searchInput")
 
                             } else {
-                                // **핵심 변경 4: bottomNavController를 사용하여 해당 탭의 경로로 이동합니다.**
                                 bottomNavController.navigate(navItem.route) {
-                                    // 백 스택 관리 옵션:
-                                    // 1. 시작 목적지까지 팝하여 백 스택에 여러 인스턴스가 쌓이는 것을 방지
                                     popUpTo(bottomNavController.graph.findStartDestination().id) {
-                                        saveState = true // 현재 앱의 상태를 저장
+                                        saveState = true
                                     }
-                                    // 2. 동일한 아이템을 다시 선택했을 때 새로운 목적지 인스턴스 생성 방지
                                     launchSingleTop = true
-                                    // 3. 이전에 저장된 상태를 복원
                                     restoreState = true
                                 }
                             }
-
-
                         },
                         icon = {
                             Icon(imageVector = navItem.icon, contentDescription = "Icon")
@@ -159,61 +146,200 @@ fun MainView(
                         label = {
                             Text(text = navItem.label)
 
-                        }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            // 선택된 상태의 아이콘 색상 (Text 색상도 함께 적용됨)
+                            selectedIconColor = Color.Red,
+                            // 선택되지 않은 상태의 아이콘 색상
+                            unselectedIconColor = Color.Gray,
+                            // 선택된 상태의 배경색
+                            indicatorColor = BrandYellow,
+//                            indicatorColor = Color.Yellow.copy(alpha = 0.2f),
+
+                            // 선택된 상태의 텍스트 색상 (label에 적용됨)
+                            selectedTextColor = Color.Red,
+                            // 선택되지 않은 상태의 텍스트 색상
+                            unselectedTextColor = Color.Gray
+                        )
                     )
                 }
             }
         }
 
     ) { innerPadding ->
-        // **핵심 변경 5: MainView 내부의 NavHost - 바텀 내비게이션 탭의 콘텐츠를 렌더링합니다.**
-        NavHost(
-            navController = bottomNavController,        // <-- 여기서는 bottomNavController를 사용합니다.
-            startDestination = navItemList[0].route,    // MainView 진입 시 기본으로 보여줄 탭 (예: "home_tab")
-            modifier = Modifier.padding(innerPadding)   // Scaffold가 제공하는 패딩을 적용하여 바텀바/탑바와 겹치지 않게 함
+        // [수정] NavHost를 Box로 감싸고, 이 Box에 패딩을 적용하여 드롭다운이 전체를 덮도록 합니다.
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
         ) {
-            composable("home") {
-                ItemListScreen(
-                    // onNavigateToSearch: ItemListScreen 내부의 검색 아이콘을 눌렀을 때 실행될 동작
-                    onNavigateToSearch = {
-                        navController.navigate("searchScreen")  // searchScreen 경로로 이동
-                    },
-                    onItemClick = { itemId ->
-                        navController.navigate("itemDetail/$itemId")
-                    }
-                )
-            }
-            composable("chatRoomList") {
-                ChatListScreen(
-                    onChatRoomClick = { chatRoomId, opponentId, itemId ->
-                        // 문자열로 데이터 넘겨줌
-                        navController.navigate("chatRoom/$chatRoomId") // 전체 NavController 사용
-                        Log.d(
-                            "ChatClick",
-                            "MainView -> Navigating to chatRoom: ID=$chatRoomId"
-                        )
-                    },
-                    myUserId = userProfile?.userId
-                        ?: -1,   // 없으면 user -1로 하기 -> 아마 서버에서 에러날거임 -1 이면
-                    chatRooms = mainUiState.chatRooms // ◀◀ 이 부분이 핵심입니다.
-                )
-            }
-            composable("profile") {
+            // **NavHost** (탭 콘텐츠)
+            NavHost(
+                navController = bottomNavController,
+                startDestination = navItemList[0].route,
+            ) {
+                composable("home") {
+                    ItemListScreen(
+                        onNavigateToSearch = {
+                            navController.navigate("searchScreen")
+                        },
+                        onItemClick = { itemId ->
+                            navController.navigate("itemDetail/$itemId")
+                        },
+                        onNavigateToAddAddress = {
+                            navController.navigate("addressInput")
+                        },
+                        // [추가] MainView의 메뉴 열기 이벤트를 ItemListScreen으로 전달
+                        onLocationClick = { isLocationMenuOpen = true }
+                    )
+                }
+                composable("chatRoomList") {
+                    ChatListScreen(
+                        onChatRoomClick = { chatRoomId, opponentId, itemId ->
+                            navController.navigate("chatRoom/$chatRoomId")
+                            Log.d(
+                                "ChatClick",
+                                "MainView -> Navigating to chatRoom: ID=$chatRoomId"
+                            )
+                        },
+                        myUserId = userProfile?.userId ?: -1,
+                        chatRooms = mainUiState.chatRooms
+                    )
+                }
+                composable("profile") {
 
-                ProfileScreen(
-                    onNavigateToProfileEditScreen = {
-                        navController.navigate("profileEdit")
-                    },
-                    onNavigateToSalesHistoryScreen = {
-                        navController.navigate("salesHistory")
-                    },
-                    onNavigateToFavoritesScreen = {
-                        navController.navigate("favorites")
-                    },
-                    navController = navController
+                    ProfileScreen(
+                        onNavigateToProfileEditScreen = {
+                            navController.navigate("profileEdit")
+                        },
+                        onNavigateToSalesHistoryScreen = {
+                            navController.navigate("salesHistory")
+                        },
+                        onNavigateToFavoritesScreen = {
+                            navController.navigate("favorites")
+                        },
+                        navController = navController
+                    )
+                }
+            }
+
+            // [추가] 최상위 MainView에 드롭다운 메뉴와 그림자를 추가
+//            LocationDropdownWithDimmingOnMain(
+//                isMenuOpen = isLocationMenuOpen,
+////                availableAddresses = mainUiState.availableLocations,
+//                availableAddresses = mainUiState.availableLocations,
+//
+//                selectedAddressName = mainaddress ?: "내 주소",
+//                onAddressSelected = { location ->
+//                    // 실제 ViewModel 로직 호출
+//                    // mainViewModel.onAddressSelected(location)
+//                    isLocationMenuOpen = false
+//                },
+//                onNavigateToAddAddress = {
+//                    navController.navigate("addressInput")
+//                    isLocationMenuOpen = false
+//                },
+//                onDismiss = { isLocationMenuOpen = false }
+//            )
+        }
+    }
+}
+
+
+// ----------------------------------------------------------------------
+// [추가] MainView에서 사용하기 위한 부속 컴포저블 및 데이터 클래스 정의
+// ----------------------------------------------------------------------
+
+// LocationUiModel이 ItemListScreen.kt의 model 패키지에 있다면 여기에 복사 또는 별도 공유 파일 사용
+data class LocationUiModel(
+    val name: String,
+    val isSelected: Boolean = false,
+    val id: Int = 0 // 필요하다면 ID 추가
+)
+
+/**
+ * [추가] 드롭다운 메뉴와 배경 그림자 컴포저블 (MainView 전체에 적용)
+ */
+@Composable
+fun LocationDropdownWithDimmingOnMain(
+    isMenuOpen: Boolean,
+    availableAddresses: List<LocationUiModel>,
+    selectedAddressName: String,
+    onAddressSelected: (LocationUiModel) -> Unit,
+    onNavigateToAddAddress: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    // === 1. 어두운 배경 (그림자) 레이어 ===
+    AnimatedVisibility(
+        visible = isMenuOpen,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(1f) // 가장 위에 위치
+    ) {
+        Spacer(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    onClick = onDismiss,
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
                 )
+        )
+    }
+
+    // === 2. 커스텀 드롭다운 메뉴 레이어 ===
+    if (isMenuOpen) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                // TopBar 바로 아래에 위치하도록 조정
+                .statusBarsPadding()
+                .padding(start = 16.dp, top = 56.dp) // TopAppBar 높이를 고려하여 조정 (대략 56dp)
+                .zIndex(2f) // 그림자 위에 위치
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                .padding(vertical = 4.dp)
+        ) {
+            // 주소 목록
+            availableAddresses.forEach { location ->
+                LocationMenuItem(
+                    text = location.name,
+                    isSelected = location.name == selectedAddressName
+                ) {
+                    onAddressSelected(location)
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // 내 동네 설정
+            LocationMenuItem(
+                text = "내 동네 설정",
+                isSelected = false
+            ) {
+                onNavigateToAddAddress()
             }
         }
     }
 }
 
+/**
+ * [추가] 드롭다운 메뉴의 개별 항목 컴포저블
+ */
+@Composable
+fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Black,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    )
+}

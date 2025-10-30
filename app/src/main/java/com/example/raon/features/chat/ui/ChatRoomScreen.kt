@@ -77,13 +77,6 @@ import com.example.raon.ui.theme.OtherBubbleColor
 import com.example.raon.ui.theme.OtherTextColor
 import kotlinx.coroutines.launch
 
-// 데이터 클래스는 변경 없음
-data class ImageAnalysisResult(
-    val imageUrl: String,
-    val result: String,
-    val similarImages: List<String> = emptyList()
-)
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
