@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding // 👈 [추가]
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,33 +57,30 @@ import com.example.raon.features.chat.ui.ChatListScreen
 import com.example.raon.features.chat.ui.ChatListTopAppBar
 import com.example.raon.features.item.ui.list.HomeScreenTopAppBar
 import com.example.raon.features.item.ui.list.ItemListScreen
+import com.example.raon.features.item.ui.list.LocationUiModel
 import com.example.raon.features.user.ui.ProfileScreen
 import com.example.raon.features.user.ui.ProfileTopAppBar
 import com.example.raon.navigation.NavItem
 import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
 
-// comp 자동 완성 키워드
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainView(
     modifier: Modifier = Modifier,
     navController: NavController,
-    mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel 실
+    mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel
 ) {
 
-    // 구독 시작 코드
     val userProfile by mainViewModel.userProfile.collectAsStateWithLifecycle()
-    val mainaddress = userProfile?.address?.split(" ")?.lastOrNull()    // -> 풀 주소의 마지막 동만 가져오기
+    val fullAddress = userProfile?.address
+    val mainAddressName = fullAddress?.split(" ")?.lastOrNull()
 
     val mainUiState by mainViewModel.uiState.collectAsState()
     val bottomNavController = rememberNavController()
 
-    // [추가] MainView에서 드롭다운 메뉴 열림 상태를 관리합니다. (화면 전체 그림자용)
     var isLocationMenuOpen by remember { mutableStateOf(false) }
 
-
-    // 불변 List 자료구조 사용
     val navItemList = listOf(
         NavItem("홈", Icons.Default.Home, "home"),
         NavItem("검색", Icons.Default.Search, "searchInput"),
@@ -91,100 +89,83 @@ fun MainView(
         NavItem("프로필", Icons.Default.Person, "profile"),
     )
 
-    var selectedIndex by remember {
-        mutableStateOf(0)
-    }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-            val currentRoute = navBackStackEntry?.destination?.route
-
-            when (currentRoute) {
-                "home" -> HomeScreenTopAppBar(
-                    onNavigateToSearch = { navController.navigate("searchInput") {} },
-                    address = mainaddress ?: "내 주소",
-                    // [수정] MainView의 상태를 변경하는 이벤트를 전달하여 메뉴 열기
-                    onLocationClick = { isLocationMenuOpen = true },
-                )
-
-                "chatRoomList" -> ChatListTopAppBar(navController)
-                "profile" -> ProfileTopAppBar(navController)
-            }
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                modifier = Modifier.height(115.dp)
-            ) {
+    // Scaffold를 Box로 감싸기
+    // 이 Box가 그림자와 드롭다운을 포함하는 최상위 컨테이너가 됩니다.
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        Scaffold(
+            // Scaffold 자체는 Box 안에서 전체를 채우기.
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
                 val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                navItemList.forEach { navItem ->
-                    NavigationBarItem(
-                        selected = currentRoute == navItem.route,
-                        onClick = {
-
-                            if (navItem.route == "addItem") {
-                                navController.navigate("addItem")
-                            } else if (navItem.route == "searchInput") {
-                                navController.navigate("searchInput")
-
-                            } else {
-                                bottomNavController.navigate(navItem.route) {
-                                    popUpTo(bottomNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        },
-                        icon = {
-                            Icon(imageVector = navItem.icon, contentDescription = "Icon")
-                        },
-                        label = {
-                            Text(text = navItem.label)
-
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            // 선택된 상태의 아이콘 색상:
-                            // 밝은 노란색(BrandYellow) 배경과 대비가 가장 좋은 BrandDarkText 사용
-                            selectedIconColor = BrandDarkText,
-
-                            // 선택되지 않은 상태의 아이콘 색상:
-                            // 너무 튀지 않으면서 식별은 가능한 중간 톤의 회색
-                            unselectedIconColor = Color(0xFF9E9E9E), // Medium Gray
-
-                            // 선택된 상태의 배경색:
-                            // 브랜드 컬러를 사용하여 현재 활성화된 탭을 강조
-                            indicatorColor = BrandYellow,
-
-                            // 선택된 상태의 텍스트 색상:
-                            // 아이콘과 동일하게 BrandDarkText를 사용하여 가독성 확보
-                            selectedTextColor = BrandDarkText,
-
-                            // 선택되지 않은 상태의 텍스트 색상:
-                            // 아이콘과 동일한 회색으로 통일감 부여
-                            unselectedTextColor = Color(0xFF9E9E9E) // Medium Gray
-                        )
+                when (currentRoute) {
+                    "home" -> HomeScreenTopAppBar(
+                        onNavigateToSearch = { navController.navigate("searchInput") {} },
+                        address = mainAddressName ?: "위치 없음",
+                        onLocationClick = { isLocationMenuOpen = true },
                     )
+
+                    "chatRoomList" -> ChatListTopAppBar(navController)
+                    "profile" -> ProfileTopAppBar(navController)
+                }
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = Color.White,
+                    modifier = Modifier.height(80.dp)
+                ) {
+                    val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
+
+                    navItemList.forEach { navItem ->
+                        NavigationBarItem(
+                            selected = currentRoute == navItem.route,
+                            onClick = {
+                                if (navItem.route == "addItem") {
+                                    navController.navigate("addItem")
+                                } else if (navItem.route == "searchInput") {
+                                    navController.navigate("searchInput")
+                                } else {
+                                    bottomNavController.navigate(navItem.route) {
+                                        popUpTo(bottomNavController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = navItem.icon,
+                                    contentDescription = "Icon"
+                                )
+                            },
+                            label = { Text(text = navItem.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = BrandDarkText,
+                                unselectedIconColor = Color(0xFF9E9E9E),
+                                indicatorColor = BrandYellow,
+                                selectedTextColor = BrandDarkText,
+                                unselectedTextColor = Color(0xFF9E9E9E)
+                            )
+                        )
+                    }
                 }
             }
-        }
 
-    ) { innerPadding ->
-        // [수정] NavHost를 Box로 감싸고, 이 Box에 패딩을 적용하여 드롭다운이 전체를 덮도록 합니다.
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            // **NavHost** (탭 콘텐츠)
+        ) { innerPadding ->
+            // NavHost는 Scaffold의 content 영역에만 배치하기
             NavHost(
                 navController = bottomNavController,
                 startDestination = navItemList[0].route,
+                // NavHost가 innerPadding을 적용하여 Top/Bottom Bar 영역을 피합니다.
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
             ) {
                 composable("home") {
                     ItemListScreen(
@@ -197,7 +178,6 @@ fun MainView(
                         onNavigateToAddAddress = {
                             navController.navigate("addressInput")
                         },
-                        // [추가] MainView의 메뉴 열기 이벤트를 ItemListScreen으로 전달
                         onLocationClick = { isLocationMenuOpen = true }
                     )
                 }
@@ -215,7 +195,6 @@ fun MainView(
                     )
                 }
                 composable("profile") {
-
                     ProfileScreen(
                         onNavigateToProfileEditScreen = {
                             navController.navigate("profileEdit")
@@ -230,49 +209,45 @@ fun MainView(
                     )
                 }
             }
-
-            // [추가] 최상위 MainView에 드롭다운 메뉴와 그림자를 추가
-//            LocationDropdownWithDimmingOnMain(
-//                isMenuOpen = isLocationMenuOpen,
-////                availableAddresses = mainUiState.availableLocations,
-//                availableAddresses = mainUiState.availableLocations,
-//
-//                selectedAddressName = mainaddress ?: "내 주소",
-//                onAddressSelected = { location ->
-//                    // 실제 ViewModel 로직 호출
-//                    // mainViewModel.onAddressSelected(location)
-//                    isLocationMenuOpen = false
-//                },
-//                onNavigateToAddAddress = {
-//                    navController.navigate("addressInput")
-//                    isLocationMenuOpen = false
-//                },
-//                onDismiss = { isLocationMenuOpen = false }
-//            )
         }
-    }
+
+        // 드롭다운과 그림자를 Scaffold의 *형제*로 뺍니다.
+        //    이렇게 하면 Scaffold (TopBar, BottomBar 포함) 위에 그려집니다.
+        LocationDropdownWithDimmingOnMain(
+            isMenuOpen = isLocationMenuOpen,
+            // UI 확인용 임시 데이터
+            availableAddresses = listOf(
+                LocationUiModel(id = 1, name = "서울특별시 강남구 대자동"),
+                LocationUiModel(id = 2, name = "서울특별시 강남구 원종2동")
+            ),
+            selectedAddressName = fullAddress ?: "위치 없음",
+            // innerPadding을 쓸 수 없으므로, 표준 TopAppBar 높이 56.dp를 사용합니다.
+            //    (HomeScreenTopAppBar가 56.dp보다 크면 이 값만 조절하면 됩니다)
+            topBarHeight = 56.dp,
+            onAddressSelected = { location ->
+                // mainViewModel.onAddressSelected(location) // (기능 연결 전 주석 처리)
+                isLocationMenuOpen = false
+            },
+            onNavigateToAddAddress = {
+                navController.navigate("addressInput")
+                isLocationMenuOpen = false
+            },
+            onDismiss = { isLocationMenuOpen = false }
+        )
+    } //
 }
 
 
 // ----------------------------------------------------------------------
-// [추가] MainView에서 사용하기 위한 부속 컴포저블 및 데이터 클래스 정의
+// 부속 컴포저블
 // ----------------------------------------------------------------------
 
-// LocationUiModel이 ItemListScreen.kt의 model 패키지에 있다면 여기에 복사 또는 별도 공유 파일 사용
-data class LocationUiModel(
-    val name: String,
-    val isSelected: Boolean = false,
-    val id: Int = 0 // 필요하다면 ID 추가
-)
-
-/**
- * [추가] 드롭다운 메뉴와 배경 그림자 컴포저블 (MainView 전체에 적용)
- */
 @Composable
 fun LocationDropdownWithDimmingOnMain(
     isMenuOpen: Boolean,
     availableAddresses: List<LocationUiModel>,
     selectedAddressName: String,
+    topBarHeight: Dp, // 고정 Dp 또는 동적 Dp를 받음
     onAddressSelected: (LocationUiModel) -> Unit,
     onNavigateToAddAddress: () -> Unit,
     onDismiss: () -> Unit
@@ -283,8 +258,8 @@ fun LocationDropdownWithDimmingOnMain(
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = Modifier
-            .fillMaxSize()
-            .zIndex(1f) // 가장 위에 위치
+            .fillMaxSize() // 이제 이 fillMaxSize가 진짜 화면 전체를 덮습니다.
+            .zIndex(10f)
     ) {
         Spacer(
             modifier = Modifier
@@ -299,14 +274,18 @@ fun LocationDropdownWithDimmingOnMain(
     }
 
     // === 2. 커스텀 드롭다운 메뉴 레이어 ===
-    if (isMenuOpen) {
+    AnimatedVisibility(
+        visible = isMenuOpen,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = Modifier
+            .fillMaxWidth(0.6f)
+            .zIndex(11f) // 그림자 위에 위치
+            .statusBarsPadding() // 상단 상태바 영역을 피합니다.
+            .padding(start = 16.dp, top = topBarHeight) // 상태바 아래 + TopAppBar 높이만큼 띄웁니다.
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.5f)
-                // TopBar 바로 아래에 위치하도록 조정
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 56.dp) // TopAppBar 높이를 고려하여 조정 (대략 56dp)
-                .zIndex(2f) // 그림자 위에 위치
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
@@ -335,13 +314,11 @@ fun LocationDropdownWithDimmingOnMain(
     }
 }
 
-/**
- * [추가] 드롭다운 메뉴의 개별 항목 컴포저블
- */
+
 @Composable
 fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
-        text = text,
+        text = text.split(" ").lastOrNull() ?: text, // 마지막 "동" 이름만 표시
         style = MaterialTheme.typography.titleMedium,
         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
         color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Black,
