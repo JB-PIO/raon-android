@@ -43,7 +43,8 @@ import com.example.raon.features.location.domain.model.Location
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationSearchScreen(
-    onNavigateToSignup: (location: String, locationId: Int) -> Unit,
+//    onNavigateToSignup: (location: String, locationId: Int) -> Unit,
+    onLocationSelected: (Location) -> Unit, // 👈 onNavigateToSignup 대신 사용
     onBackClick: () -> Unit,
     locationViewModel: LocationViewModel = hiltViewModel()
 ) {
@@ -129,10 +130,12 @@ fun LocationSearchScreen(
                             LocationListItem(
                                 locationInfo = locationInfo,
                                 onItemClick = { selectedLocation ->
-                                    onNavigateToSignup(
-                                        selectedLocation.address,
-                                        selectedLocation.locationId
-                                    )
+
+                                    onLocationSelected(selectedLocation) // 👈
+//                                    onNavigateToSignup(
+//                                        selectedLocation.address,
+//                                        selectedLocation.locationId
+//                                    )
                                 }
                             )
                         }

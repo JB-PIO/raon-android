@@ -89,4 +89,43 @@ class UserRepositoryImpl @Inject constructor(
     }
 
 
+    // ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+
+    // ---------------- [추가된 코드] ----------------
+    /**
+     * 메인 위치 수정 구현
+     */
+//    override suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit> {
+//        // 1. API 호출 (닉네임, 프로필 이미지는 null로 보내 변경 없음을 알림)
+//        val result = handleApi {
+//            userApiService.updateProfile(
+//                EditProfileDto(nickname = null, profileImageUrl = null, locationId = locationId)
+//            )
+//        }
+//
+//        // 2. API 호출이 성공했을 때만 로컬 DataStore의 위치 정보 갱신
+//        if (result is ApiResult.Success) {
+//            userDataStore.saveUserLocation(locationId, locationName)
+//        }
+//
+//        // API 결과 반환 (결과 데이터는 Unit으로 변환)
+//        return result.map { }
+//    }
+
+    /**
+     * 즐겨찾기 목록 가져오기 구현
+     */
+    override fun getFavoriteLocations(): Flow<List<Pair<Int, String>>> {
+        // DataStore의 Flow를 그대로 반환
+        return userDataStore.favoriteLocationsFlow
+    }
+
+    /**
+     * 즐겨찾기 추가 구현
+     */
+    override suspend fun addFavoriteLocation(id: Int, name: String) {
+        userDataStore.addFavoriteLocation(id, name)
+    }
+
+
 }

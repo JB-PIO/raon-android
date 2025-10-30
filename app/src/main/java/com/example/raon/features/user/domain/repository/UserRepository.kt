@@ -20,4 +20,24 @@ interface UserRepository {
 
 
     suspend fun clearUserProfileData() // DataStore 초기화 함수 추가
+
+    // ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+
+    // ---------------- [추가된 코드] ----------------
+    /**
+     * API를 호출하여 사용자의 '메인 위치'를 수정합니다.
+     */
+//    suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit>
+
+    /**
+     * DataStore에서 '즐겨찾기 위치' 목록을 Flow로 가져옵니다.
+     */
+    fun getFavoriteLocations(): Flow<List<Pair<Int, String>>>
+
+    /**
+     * DataStore에 '즐겨찾기 위치'를 추가합니다.
+     */
+    suspend fun addFavoriteLocation(id: Int, name: String)
+    // ---------------------------------------------
+
 }

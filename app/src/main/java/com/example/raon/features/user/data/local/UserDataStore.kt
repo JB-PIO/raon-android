@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.raon.core.common.AppConstants
 import com.example.raon.features.user.domain.model.User
@@ -35,6 +36,10 @@ class UserDataStore @Inject constructor(@ApplicationContext private val context:
 
         val KEY_LOCATION_ID = intPreferencesKey("user_location_id") // ◀◀◀ 이 줄을 추가하세요
 
+
+        val KEY_FAVORITE_LOCATIONS = stringSetPreferencesKey("user_favorite_locations")
+
+
     }
 
     /**
@@ -51,6 +56,17 @@ class UserDataStore @Inject constructor(@ApplicationContext private val context:
             preferences[KEY_ADDRESS] = user.address
             preferences[KEY_LOCATION_ID] = user.locationId // ◀◀◀ 이 줄을 추가하세요
 
+        }
+    }
+
+    // ---------------- [추가된 코드] ----------------
+    /**
+     * API를 통해 메인 위치 변경이 성공했을 때, 로컬 DataStore의 위치 정보만 갱신합니다.
+     */
+    suspend fun saveUserLocation(locationId: Int, address: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_ADDRESS] = address
+            preferences[KEY_LOCATION_ID] = locationId
         }
     }
 
@@ -74,6 +90,59 @@ class UserDataStore @Inject constructor(@ApplicationContext private val context:
                 address = preferences[KEY_ADDRESS] ?: "",
                 locationId = preferences[KEY_LOCATION_ID] ?: 1
             )
+        }
+    }
+
+
+    // ---------------- [추가된 코드] ----------------
+    /**
+     * 저장된 즐겨찾기 위치 목록을 Flow<List<Pair<ID, 주소>>> 형태로 제공합니다.
+     */
+    val favoriteLocationsFlow: Flow<List<Pair<Int, String>>> =
+        context.dataStore.data.map { preferences ->
+            preferences[KEY_FAVORITE_LOCATIONS].orEmpty()
+                .mapNotNull { storedString ->
+                    // "id,이름" 형식 파싱
+                    val parts = storedString.split(",", limit = 2)
+                    if (parts.size == 2) {
+                        parts[0].toIntOrNull()?.let { id ->
+                            Pair(id, parts[1])
+                        }
+                    } else {
+                        null // 형식이 잘못된 데이터는 무시
+                    }
+                }
+                // 저장된 Set은 순서를 보장하지 않으므로, addFavoriteLocation에서 순서를 관리
+                // 여기서는 List로 변환
+                .toList()
+        }
+
+    /**
+     * 새 즐겨찾기 위치를 추가합니다. (최대 2개)
+     * @param id 위치 ID
+     * @param name 위치의 전체 주소
+     */
+    suspend fun addFavoriteLocation(id: Int, name: String) {
+        context.dataStore.edit { preferences ->
+            // 순서를 관리하기 위해 List로 변환
+            val currentFavoritesList = preferences[KEY_FAVORITE_LOCATIONS].orEmpty()
+                .toMutableList()
+
+            val newFavoriteString = "$id,$name"
+
+            // 1. 이미 목록에 있으면 제거 (순서를 최신으로 갱신하기 위함)
+            currentFavoritesList.removeIf { it.startsWith("$id,") }
+
+            // 2. 새 위치를 리스트의 맨 뒤(최신)에 추가
+            currentFavoritesList.add(newFavoriteString)
+
+            // 3. 만약 2개를 초과하면, 가장 오래된(맨 앞) 항목을 제거
+            while (currentFavoritesList.size > 2) {
+                currentFavoritesList.removeAt(0)
+            }
+
+            // 4. 최종 리스트를 Set으로 변환하여 다시 저장
+            preferences[KEY_FAVORITE_LOCATIONS] = currentFavoritesList.toSet()
         }
     }
 

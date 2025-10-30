@@ -29,7 +29,7 @@ object DatabaseModule {
         ).build()
     }
 
-    // 2. ✨ CategoryDao를 제공하는 방법 (이 부분이 에러 해결의 핵심)
+    // 2. CategoryDao를 제공하는 방법 (이 부분이 에러 해결의 핵심)
     @Provides
     @Singleton
     fun provideCategoryDao(appDatabase: AppDatabase): CategoryDao {

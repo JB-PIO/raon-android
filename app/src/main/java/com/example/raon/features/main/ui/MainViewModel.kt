@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -65,6 +66,21 @@ class MainViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
+
+
+    // [추가] 즐겨찾기 위치 목록
+    val favoriteLocations: StateFlow<List<LocationUiModel>> =
+        userRepository.getFavoriteLocations()
+            .map { pairs ->
+                // Pair<Int, String>을 LocationUiModel로 변환
+                pairs.map { LocationUiModel(id = it.first, name = it.second) }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
 
     init {
         loadInitialData()
@@ -238,6 +254,33 @@ class MainViewModel @Inject constructor(
             }
             // 업데이트된 새 리스트로 UI 상태를 교체합니다.
             currentState.copy(chatRooms = updatedChatRooms)
+        }
+    }
+
+
+    // [추가] 드롭다운에서 새 위치(즐겨찾기 또는 현재위치)를 선택했을 때 호출
+    fun selectNewMainLocation(location: LocationUiModel) {
+        viewModelScope.launch {
+            // 레파지토리를 통해 API 호출 및 로컬 DataStore 업데이트
+//            userRepository.editMyLocation(location.id, location.name)
+            // userProfile Flow가 자동으로 갱신되므로
+            // ItemListViewModel 등 userProfile을 구독하는 모든 곳이 자동 갱신됩니다.
+        }
+    }
+
+    // [추가] '내 동네 설정'에서 위치를 선택했을 때 호출 (MainGraph에서 사용)
+    fun addFavoriteLocation(id: Int, name: String) {
+        viewModelScope.launch {
+            userRepository.addFavoriteLocation(id, name)
+            // favoriteLocations Flow가 자동으로 갱신됩니다.
+        }
+    }
+
+    // [추가] (MainGraph용) MainViewModel에서 위치를 직접 업데이트하는 함수
+    // '내 동네 설정'이 아닌, 다른 경로로 위치를 변경할 때 사용 (예: 프로필 수정)
+    fun updateUserLocation(locationId: Int, address: String) {
+        viewModelScope.launch {
+//            userRepository.editMyLocation(locationId, address)
         }
     }
 

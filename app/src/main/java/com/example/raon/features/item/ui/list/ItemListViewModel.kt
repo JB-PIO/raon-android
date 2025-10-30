@@ -129,7 +129,7 @@ class ItemListViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isRefreshing = false, // 새로고침 완료
-                        isLoading = false,    // 👈 ⭐️ [버그 수정] 로딩 상태 false로 변경
+                        isLoading = false,    // [버그 수정] 로딩 상태 false로 변경
                         items = refreshedItems,
                         currentPage = 1, // 다음 페이지는 1
                         errorMessage = null
@@ -139,7 +139,7 @@ class ItemListViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isRefreshing = false, // 새로고침 실패
-                        isLoading = false,    // 👈 ⭐️ [버그 수정] 로딩 상태 false로 변경
+                        isLoading = false,    // [버그 수정] 로딩 상태 false로 변경
                         errorMessage = "데이터를 새로고침하는데 실패했습니다."
                     )
                 }

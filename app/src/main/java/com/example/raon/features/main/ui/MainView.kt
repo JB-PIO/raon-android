@@ -72,9 +72,17 @@ fun MainView(
     mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel
 ) {
 
+    // [수정] ViewModel에서 실제 데이터 가져오기
     val userProfile by mainViewModel.userProfile.collectAsStateWithLifecycle()
+    val favoriteLocations by mainViewModel.favoriteLocations.collectAsStateWithLifecycle()
+
     val fullAddress = userProfile?.address
     val mainAddressName = fullAddress?.split(" ")?.lastOrNull()
+
+    // [추가] 현재 위치를 LocationUiModel로 변환
+    val currentLocation = userProfile?.let {
+        LocationUiModel(id = it.locationId, name = it.address)
+    }
 
     val mainUiState by mainViewModel.uiState.collectAsState()
     val bottomNavController = rememberNavController()
@@ -90,12 +98,11 @@ fun MainView(
     )
 
     // Scaffold를 Box로 감싸기
-    // 이 Box가 그림자와 드롭다운을 포함하는 최상위 컨테이너가 됩니다.
     Box(
         modifier = modifier.fillMaxSize()
     ) {
         Scaffold(
-            // Scaffold 자체는 Box 안에서 전체를 채우기.
+            // Scaffold 자체는 Box 안에서 전체를 채기.
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
@@ -184,6 +191,7 @@ fun MainView(
                 composable("chatRoomList") {
                     ChatListScreen(
                         onChatRoomClick = { chatRoomId, opponentId, itemId ->
+                            // [수정] AppNavigation.kt의 정의와 일치하도록 수정
                             navController.navigate("chatRoom/$chatRoomId")
                             Log.d(
                                 "ChatClick",
@@ -212,29 +220,24 @@ fun MainView(
         }
 
         // 드롭다운과 그림자를 Scaffold의 *형제*로 뺍니다.
-        //    이렇게 하면 Scaffold (TopBar, BottomBar 포함) 위에 그려집니다.
         LocationDropdownWithDimmingOnMain(
             isMenuOpen = isLocationMenuOpen,
-            // UI 확인용 임시 데이터
-            availableAddresses = listOf(
-                LocationUiModel(id = 1, name = "서울특별시 강남구 대자동"),
-                LocationUiModel(id = 2, name = "서울특별시 강남구 원종2동")
-            ),
-            selectedAddressName = fullAddress ?: "위치 없음",
-            // innerPadding을 쓸 수 없으므로, 표준 TopAppBar 높이 56.dp를 사용합니다.
-            //    (HomeScreenTopAppBar가 56.dp보다 크면 이 값만 조절하면 됩니다)
+            availableAddresses = favoriteLocations, // 👈 [수정] ViewModel의 실제 즐겨찾기 목록
+            currentLocation = currentLocation, // 👈 [수정] ViewModel의 실제 현재 위치
+            selectedAddressName = fullAddress ?: "위치 없음", // 👈 [수정] ViewModel의 실제 주소
             topBarHeight = 56.dp,
             onAddressSelected = { location ->
-                // mainViewModel.onAddressSelected(location) // (기능 연결 전 주석 처리)
+                mainViewModel.selectNewMainLocation(location) // 👈 [수정] ViewModel 함수 호출
                 isLocationMenuOpen = false
             },
             onNavigateToAddAddress = {
-                navController.navigate("addressInput")
+                // [수정] 올바른 경로("location")와 "favorite" 모드로 호출
+                navController.navigate("location?mode=favorite")
                 isLocationMenuOpen = false
             },
             onDismiss = { isLocationMenuOpen = false }
         )
-    } //
+    }
 }
 
 
@@ -246,6 +249,7 @@ fun MainView(
 fun LocationDropdownWithDimmingOnMain(
     isMenuOpen: Boolean,
     availableAddresses: List<LocationUiModel>,
+    currentLocation: LocationUiModel?, // 👈 [수정] 현재 위치 추가
     selectedAddressName: String,
     topBarHeight: Dp, // 고정 Dp 또는 동적 Dp를 받음
     onAddressSelected: (LocationUiModel) -> Unit,
@@ -291,13 +295,34 @@ fun LocationDropdownWithDimmingOnMain(
                 .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
                 .padding(vertical = 4.dp)
         ) {
-            // 주소 목록
+            // [수정] 1. 즐겨찾기 목록 (최대 2개)
             availableAddresses.forEach { location ->
                 LocationMenuItem(
-                    text = location.name,
+                    // 👈 [수정] 분리 로직을 여기서 적용
+                    text = location.name.split(" ").lastOrNull() ?: location.name,
                     isSelected = location.name == selectedAddressName
                 ) {
                     onAddressSelected(location)
+                }
+            }
+
+            // [수정] 2. 현재 위치 (즐겨찾기에 없는 경우에만 표시)
+            currentLocation?.let {
+                // ID로 비교하여 즐겨찾기에 이미 있는지 확인
+                val isAlreadyInFavorites = availableAddresses.any { it.id == currentLocation.id }
+
+                if (!isAlreadyInFavorites) {
+                    // 즐겨찾기가 1개라도 있으면 구분선 추가
+                    if (availableAddresses.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                    LocationMenuItem(
+                        // 👈 [수정] 분리 로직을 여기서 적용
+                        text = it.name.split(" ").lastOrNull() ?: it.name,
+                        isSelected = it.name == selectedAddressName
+                    ) {
+                        onAddressSelected(it) // 동일한 콜백 사용
+                    }
                 }
             }
 
@@ -305,7 +330,7 @@ fun LocationDropdownWithDimmingOnMain(
 
             // 내 동네 설정
             LocationMenuItem(
-                text = "내 동네 설정",
+                text = "주소 추가", // [수정] 여기는 분리 로직을 적용 안 함
                 isSelected = false
             ) {
                 onNavigateToAddAddress()
@@ -318,10 +343,11 @@ fun LocationDropdownWithDimmingOnMain(
 @Composable
 fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
-        text = text.split(" ").lastOrNull() ?: text, // 마지막 "동" 이름만 표시
+        text = text, // [수정] 분리 로직을 여기서 제거
         style = MaterialTheme.typography.titleMedium,
+        // [수정] 요청하신 대로 색상과 굵기 변경
         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Black,
+        color = if (isSelected) BrandDarkText else Color.Gray,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)

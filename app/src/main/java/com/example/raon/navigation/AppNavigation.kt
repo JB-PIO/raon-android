@@ -21,6 +21,7 @@ import com.example.raon.features.item.ui.add.AddItemScreen
 import com.example.raon.features.item.ui.add.AddItemViewModel
 import com.example.raon.features.item.ui.detail.ItemDetailScreen
 import com.example.raon.features.item.ui.detail.ItemDetailViewModel
+import com.example.raon.features.main.ui.MainViewModel
 import com.example.raon.features.profile.ui.BuyerSelectionScreen
 import com.example.raon.features.profile.ui.FavoritesScreen
 import com.example.raon.features.profile.ui.SalesHistoryScreen
@@ -34,6 +35,13 @@ import com.example.raon.features.user.ui.ProfileEditScreen
 fun AppNavigation(
     modifier: Modifier = Modifier,
 ) {
+
+
+    // ------------------ [이 부분 추가] ------------------
+    // MainViewModel을 NavHost 레벨에서 생성합니다.
+    val mainViewModel: MainViewModel = hiltViewModel()
+    // ---------------------------------------------------
+
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "auth_graph") {
 
@@ -79,7 +87,7 @@ fun AppNavigation(
             )
         }
 
-        authGraph(navController)
+        authGraph(navController, mainViewModel)
         mainGraph(navController)
 
         composable(
