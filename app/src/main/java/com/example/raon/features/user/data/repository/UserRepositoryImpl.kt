@@ -6,6 +6,7 @@ import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.handleApi
 import com.example.raon.features.user.data.dto.UpdateNicknameRequest
 import com.example.raon.features.user.data.dto.UpdateProfileImageRequest
+import com.example.raon.features.user.data.dto.UpdateUserLocation
 import com.example.raon.features.user.data.local.UserDataStore
 import com.example.raon.features.user.data.remote.UserApiService
 import com.example.raon.features.user.domain.model.User
@@ -91,26 +92,43 @@ class UserRepositoryImpl @Inject constructor(
 
     // ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
 
-    // ---------------- [추가된 코드] ----------------
+    // ---------------- [로그 추가된 부분] ----------------
     /**
      * 메인 위치 수정 구현
      */
-//    override suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit> {
-//        // 1. API 호출 (닉네임, 프로필 이미지는 null로 보내 변경 없음을 알림)
-//        val result = handleApi {
-//            userApiService.updateProfile(
-//                EditProfileDto(nickname = null, profileImageUrl = null, locationId = locationId)
-//            )
-//        }
-//
-//        // 2. API 호출이 성공했을 때만 로컬 DataStore의 위치 정보 갱신
-//        if (result is ApiResult.Success) {
-//            userDataStore.saveUserLocation(locationId, locationName)
-//        }
-//
-//        // API 결과 반환 (결과 데이터는 Unit으로 변환)
-//        return result.map { }
-//    }
+    override suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit> {
+
+        // ❗️[로그 추가]
+        Log.d("LocationUpdate", "  > UserRepositoryImpl: API 요청 시작...")
+        Log.d("LocationUpdate", "  > API Endpoint: userApiService.updateUserLocation")
+        Log.d("LocationUpdate", "  > DTO: UpdateUserLocation(locationId = $locationId)")
+
+        // 1. API 호출 (닉네임, 프로필 이미지는 null로 보내 변경 없음을 알림)
+        val result = handleApi {
+            userApiService.updateUserLocation(
+                UpdateUserLocation(locationId = locationId)
+            )
+        }
+
+        // 2. API 호출이 성공했을 때만 로컬 DataStore의 위치 정보 갱신
+        if (result is ApiResult.Success) {
+            // ❗️[로그 추가]
+            Log.d("LocationUpdate", "  > ✅ API 호출 성공. 로컬 DataStore 업데이트...")
+            userDataStore.saveUserLocation(locationId, locationName)
+        } else if (result is ApiResult.Error) {
+            // ❗️[로그 추가]
+            Log.e(
+                "LocationUpdate",
+                "  > ❌ API 호출 실패. 코드: ${result.code}, 메시지: ${result.errorBody?.message}"
+            )
+        } else if (result is ApiResult.Exception) {
+            // ❗️[로그 추가]
+            Log.e("LocationUpdate", "  > ❌ API 호출 예외 발생.", result.e)
+        }
+
+        // API 결과 반환 (결과 데이터는 Unit으로 변환)
+        return result.map { }
+    }
 
     /**
      * 즐겨찾기 목록 가져오기 구현

@@ -156,7 +156,7 @@ class ItemListViewModel @Inject constructor(
             val currentPage = _uiState.value.currentPage
             val currentLocationId = _uiState.value.locationId // 현재 state의 locationId 사용
 
-            // 📍 위치 정보가 없으면 로드를 중단합니다.
+            // 위치 정보가 없으면 로드를 중단합니다.
             if (currentLocationId == null) {
                 Log.w("ItemListViewModel", "Skipping loadMoreItems, locationId is null.")
                 _uiState.update { it.copy(isLoading = false) } // 로딩 상태 해제

@@ -27,7 +27,7 @@ interface UserRepository {
     /**
      * API를 호출하여 사용자의 '메인 위치'를 수정합니다.
      */
-//    suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit>
+    suspend fun editMyLocation(locationId: Int, locationName: String): ApiResult<Unit>
 
     /**
      * DataStore에서 '즐겨찾기 위치' 목록을 Flow로 가져옵니다.

@@ -258,11 +258,18 @@ class MainViewModel @Inject constructor(
     }
 
 
+    // ---------------- [이 부분 수정] ----------------
     // [추가] 드롭다운에서 새 위치(즐겨찾기 또는 현재위치)를 선택했을 때 호출
     fun selectNewMainLocation(location: LocationUiModel) {
+        // ❗️[로그 추가] 이 함수가 호출되는지 확인합니다.
+        Log.d("LocationUpdate", "🚀 selectNewMainLocation 호출됨")
+        Log.d("LocationUpdate", "  > 선택된 주소: ${location.name} (ID: ${location.id})")
+
         viewModelScope.launch {
+            Log.d("LocationUpdate", "  > userRepository.editMyLocation 실행...")
             // 레파지토리를 통해 API 호출 및 로컬 DataStore 업데이트
-//            userRepository.editMyLocation(location.id, location.name)
+            userRepository.editMyLocation(location.id, location.name) // 👈 주석 해제
+            Log.d("LocationUpdate", "  > API 요청 완료.")
             // userProfile Flow가 자동으로 갱신되므로
             // ItemListViewModel 등 userProfile을 구독하는 모든 곳이 자동 갱신됩니다.
         }
@@ -280,9 +287,8 @@ class MainViewModel @Inject constructor(
     // '내 동네 설정'이 아닌, 다른 경로로 위치를 변경할 때 사용 (예: 프로필 수정)
     fun updateUserLocation(locationId: Int, address: String) {
         viewModelScope.launch {
-//            userRepository.editMyLocation(locationId, address)
+            userRepository.editMyLocation(locationId, address) //  주석 해제
         }
     }
-
-
+    // ---------------------------------------------------
 }

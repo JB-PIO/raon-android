@@ -22,6 +22,12 @@ data class UpdateProfileImageRequest(
     @Json(name = "profileImage") val profileImage: String
 )
 
+// 주소 변경 요청 dto
+@JsonClass(generateAdapter = true)
+data class UpdateUserLocation(
+    @Json(name = "locationId") val locationId: Int
+)
+
 /**
  * 공통 응답 DTO (code, message 필드만 포함)
  * (Postman 응답 참고)
