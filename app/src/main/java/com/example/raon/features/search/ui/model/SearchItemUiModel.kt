@@ -12,6 +12,7 @@ data class SearchItemUiModel( // 이름 변경
     val imageUrl: String,
     val comments: Int,  // 뎃글 개수
     val likes: Int,     // 좋아요 수, 관심 글 수
-    val viewCount: Int  // 조회수
+    val viewCount: Int,  // 조회수
+    val status: String
 
 )

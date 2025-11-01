@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RemoveRedEye
 import androidx.compose.material3.HorizontalDivider
@@ -137,17 +138,7 @@ private fun ItemListItem(
                 modifier = Modifier.align(Alignment.BottomEnd),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (item.viewCount > 0) {
-                    Icon(
-                        imageVector = Icons.Outlined.RemoveRedEye,
-                        contentDescription = "조회수",
-                        modifier = Modifier.size(16.dp),
-                        tint = Color.Gray
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(text = item.viewCount.toString(), fontSize = 13.sp, color = Color.Gray)
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
+
                 if (item.comments > 0) {
                     Icon(
                         Icons.Outlined.ChatBubbleOutline,
@@ -161,13 +152,24 @@ private fun ItemListItem(
                 }
                 if (item.likes > 0) {
                     Icon(
-                        Icons.Outlined.FavoriteBorder,
+                        Icons.Outlined.Favorite,
                         contentDescription = "좋아요",
                         modifier = Modifier.size(16.dp),
                         tint = Color.Gray
                     )
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(text = item.likes.toString(), fontSize = 13.sp, color = Color.Gray)
+                }
+                if (item.viewCount > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.RemoveRedEye,
+                        contentDescription = "조회수",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(text = item.viewCount.toString(), fontSize = 13.sp, color = Color.Gray)
                 }
             }
 

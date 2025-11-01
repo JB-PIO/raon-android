@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.raon.core.model.LoginState
+import com.example.raon.ui.theme.BrandYellow
 
 @Composable
 fun SplashScreen(
@@ -35,6 +36,8 @@ fun SplashScreen(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        CircularProgressIndicator(
+            color = BrandYellow
+        )
     }
 }

@@ -284,6 +284,7 @@ class ItemRepositoryImpl @Inject constructor(
             likes = this.favoriteCount,
             comments = 0,
             viewCount = this.viewCount,
+            status = this.status
         )
     }
 

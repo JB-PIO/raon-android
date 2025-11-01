@@ -1,6 +1,7 @@
 package com.example.raon.features.search.ui
 
 
+// import 추가
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,8 +27,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -48,27 +47,26 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
-import com.example.raon.features.search.ui.model.SearchItemUiModel
+import com.example.raon.core.ui.component.ItemListComponoents
+import com.example.raon.features.category.data.local.CategoryEntity
+import com.example.raon.features.category.ui.CategoryViewModel
 import com.example.raon.ui.theme.BrandYellow
 import kotlinx.coroutines.launch
+import com.example.raon.core.ui.model.ItemListUiModel as CoreItemUiModel
 
 
 // 화면 콘텐츠
@@ -78,6 +76,8 @@ fun SearchResultScreen(
     modifier: Modifier = Modifier,
     searchQuery: String,
     searchViewModel: SearchResultViewModel = hiltViewModel(),
+    // CategoryViewModel 추가
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
     onItemClick: (Int) -> Unit = {},     // onItemClick, 기본값으로 빈 함수
     onCloses: () -> Unit = {},  // 닫기 이벤트
     onNavigateToHome: () -> Unit = {}   // 홈가기 이벤트
@@ -86,6 +86,25 @@ fun SearchResultScreen(
 
     // viewModel의 uistate 구독
     val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    // CategoryViewModel의 state 구독 (Room DB의 최상위 카테고리 목록을 가져옴)
+    val categories by categoryViewModel.categories.collectAsStateWithLifecycle()
+
+    // ✨ 3. ViewModel의 UI 모델을 공용 컴포넌트의 UI 모델로 변환(매핑)합니다.
+    val coreItems = uiState.products.map { item ->
+        CoreItemUiModel(
+            id = item.id,
+            title = item.title,
+            location = item.location,
+            timeAgo = item.timeAgo,
+            price = item.price,
+            imageUrl = item.imageUrl,
+            comments = item.comments,
+            likes = item.likes,
+            viewCount = item.viewCount,
+            status = item.status,
+            isFavorite = false // 검색 결과는 찜 목록이 아니므로 false
+        )
+    }
 
     // 화면이 처음 나타날 때 전달받은 searchQuery로 검색 시작
     LaunchedEffect(key1 = searchQuery) {
@@ -134,19 +153,21 @@ fun SearchResultScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // uiState의 가격 정보를 FilterControls로 전달
+            // uiState의 카테고리 이름 정보 전달
             FilterControls(
                 minPrice = uiState.minPrice,
                 maxPrice = uiState.maxPrice,
+                categoryName = uiState.categoryName, // <--수정
                 onSortClick = { showSortBottomSheet = true },
                 onCategoryClick = { showCategoryBottomSheet = true },
                 onLocationClick = { showLocationBottomSheet = true },
                 onPriceClick = { showPriceBottomSheet = true }
             )
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
-            // 임시 데이터인 productList를 전달
-            ProductList(
-                products = uiState.products,
+
+            // ✨ 4. 기존 ProductList 대신 공용 ItemListComponoents를 호출합니다.
+            ItemListComponoents(
+                items = coreItems,
                 onItemClick = onItemClick
             )
         }
@@ -165,10 +186,32 @@ fun SearchResultScreen(
         )
     }
 
+    // 카테고리 바텀 시트 수정
     if (showCategoryBottomSheet) {
         CategoryFilterBottomSheet(
             sheetState = categoryBottomSheetState,
+            categories = categories, // ViewModel에서 가져온 카테고리 목록 전달
+            currentCategoryId = uiState.categoryId, // 현재 선택된 ID 전달
             onDismissRequest = {
+                scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
+                    if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
+                }
+            },
+            onApplyClick = { selectedCategory -> // 콜백 변경 (단일 CategoryEntity 또는 null)
+                // SearchViewModel의 상태 업데이트
+                searchViewModel.onCategoryChanged(
+                    selectedCategory?.categoryId?.toInt(),
+                    selectedCategory?.name
+                )
+                // 시트 닫기
+                scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
+                    if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
+                }
+            },
+            onResetClick = {
+                // SearchViewModel 상태 초기화
+                searchViewModel.onCategoryChanged(null, null)
+                // 시트 닫기
                 scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
                     if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
                 }
@@ -209,11 +252,12 @@ fun SearchResultScreen(
 }
 
 
-// 수정됨: minPrice, maxPrice 파라미터 추가
+// 수정: categoryName 파라미터 추가
 @Composable
 fun FilterControls(
     minPrice: Int?,
     maxPrice: Int?,
+    categoryName: String?,
     onSortClick: () -> Unit,
     onLocationClick: () -> Unit,
     onPriceClick: () -> Unit,
@@ -241,6 +285,10 @@ fun FilterControls(
         else -> "가격" // 기본값
     }
 
+    // 카테고리 텍스트 및 적용 상태
+    val categoryText = categoryName ?: "카테고리"
+    val isCategoryFilterApplied = categoryName != null
+
     // 가격 필터가 적용되었는지 확인하는 변수
     val isPriceFilterApplied = minPrice != null || maxPrice != null
 
@@ -257,7 +305,7 @@ fun FilterControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterDropdownButton(text = "최신순", onClick = onSortClick)
-            FilterDropdownButton(text = "위치 정렬", onClick = onLocationClick) // 요청에 따라 텍스트 변경
+//            FilterDropdownButton(text = "위치 정렬", onClick = onLocationClick) // 요청에 따라 텍스트 변경
 
             // "가격" 대신 동적으로 생성된 priceText 사용
             //  가격 버튼에 isApplied 값을 전달
@@ -267,7 +315,12 @@ fun FilterControls(
                 isApplied = isPriceFilterApplied // <-- 여기를 수정
             )
 
-            FilterDropdownButton(text = "카테고리", onClick = onCategoryClick)
+            // 카테고리 버튼 수정
+            FilterDropdownButton(
+                text = categoryText,
+                onClick = onCategoryClick,
+                isApplied = isCategoryFilterApplied
+            )
         }
 
         // '판매중만 보기' 스위치
@@ -334,112 +387,8 @@ fun FilterDropdownButton(
 }
 
 
-@Composable
-fun ProductList(
-    products: List<SearchItemUiModel>,
-    onItemClick: (Int) -> Unit
-) {
-    LazyColumn {
-        items(
-            items = products,
-            key = { it.id }
-        ) { product ->
-            ProductListItem(
-                item = product,
-                onClick = { onItemClick(product.id) }
-            )
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
-        }
-    }
-}
+// ✨ 5. ProductList 및 ProductListItem Composable을 삭제했습니다.
 
-@Composable
-fun ProductListItem(
-    item: SearchItemUiModel,
-    onClick: () -> Unit
-) {
-
-
-    // 마지막 동만 추출한 텍스트
-    val lastlocation = item.location.split(" ").lastOrNull()
-
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp)
-    ) {
-        AsyncImage(
-            model = item.imageUrl,
-            contentDescription = item.title,
-            modifier = Modifier
-                .size(100.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(
-            modifier = Modifier.height(100.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    maxLines = 2
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${lastlocation}",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
-                Text(
-                    text = "${item.timeAgo}",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "%,d원".format(item.price),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                )
-            }
-            if (item.comments > 0 || item.likes > 0) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (item.comments > 0) {
-                        Icon(
-                            Icons.Outlined.ChatBubbleOutline,
-                            contentDescription = "댓글",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(text = item.comments.toString(), fontSize = 13.sp, color = Color.Gray)
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    if (item.likes > 0) {
-                        Icon(
-                            Icons.Outlined.FavoriteBorder,
-                            contentDescription = "좋아요",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(text = item.likes.toString(), fontSize = 13.sp, color = Color.Gray)
-                    }
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -447,8 +396,8 @@ fun SortBottomSheet(
     sheetState: SheetState,
     onDismissRequest: () -> Unit
 ) {
-    val sortOptions = listOf("추천순", "최신순", "낮은 가격순", "높은 가격순", "가까운순")
-    var selectedSortOption by remember { mutableStateOf("추천순") }
+    val sortOptions = listOf("최신순", "조회수순", "낮은 가격순", "높은 가격순", "가까운순")
+    var selectedSortOption by remember { mutableStateOf("최신순") }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -494,7 +443,7 @@ fun SortBottomSheet(
                         Text(
                             text = option,
                             fontSize = 16.sp,
-                            color = if (selectedSortOption == option) MaterialTheme.colorScheme.primary else Color.Black,
+                            color = if (selectedSortOption == option) BrandYellow else Color.Black,
                             fontWeight = if (selectedSortOption == option) FontWeight.SemiBold else FontWeight.Normal
                         )
                         if (option == "추천순") {
@@ -512,7 +461,7 @@ fun SortBottomSheet(
                         Icon(
                             Icons.Filled.Check,
                             contentDescription = "선택됨",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = BrandYellow,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -523,18 +472,21 @@ fun SortBottomSheet(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryFilterBottomSheet(
     sheetState: SheetState,
-    onDismissRequest: () -> Unit
+    categories: List<CategoryEntity>,
+    currentCategoryId: Int?,
+    onDismissRequest: () -> Unit,
+    onApplyClick: (CategoryEntity?) -> Unit,
+    onResetClick: () -> Unit
 ) {
-    val categories = listOf(
-        "디지털기기", "생활가전", "가구/인테리어", "유아동", "유아도서", "생활/주방",
-        "여성의류", "남성패션/잡화", "뷰티/미용", "스포츠/레저", "취미/게임/음반", "도서",
-        "티켓/교환권", "가공식품", "반려동물용품", "식물", "기타", "삽니다"
-    )
-    val selectedCategories = remember { mutableStateListOf<String>() }
+
+    var selectedCategory by remember(currentCategoryId) {
+        mutableStateOf(categories.find { it.categoryId.toInt() == currentCategoryId })
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -567,32 +519,33 @@ fun CategoryFilterBottomSheet(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(categories) { category ->
+                items(
+                    items = categories,
+                    key = { it.categoryId }
+                ) { category ->
+                    val isSelected = selectedCategory?.categoryId == category.categoryId
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (selectedCategories.contains(category)) {
-                                    selectedCategories.remove(category)
-                                } else {
-                                    selectedCategories.add(category)
-                                }
+
+                                selectedCategory = if (isSelected) null else category
                             }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+
                         Checkbox(
-                            checked = selectedCategories.contains(category),
-                            onCheckedChange = { isChecked ->
-                                if (isChecked) selectedCategories.add(category)
-                                else selectedCategories.remove(category)
+                            checked = isSelected,
+                            onCheckedChange = {
+                                selectedCategory = if (isSelected) null else category
                             },
                             colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.primary
+                                checkedColor = BrandYellow
                             )
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = category, fontSize = 16.sp)
+                        Text(text = category.name, fontSize = 16.sp)
                     }
                 }
             }
@@ -604,7 +557,10 @@ fun CategoryFilterBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { selectedCategories.clear() },
+                    onClick = {
+                        selectedCategory = null
+                        onResetClick()
+                    },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.LightGray.copy(alpha = 0.5f),
@@ -617,7 +573,7 @@ fun CategoryFilterBottomSheet(
                 }
                 Button(
                     onClick = {
-                        onDismissRequest()
+                        onApplyClick(selectedCategory)
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
@@ -633,6 +589,7 @@ fun CategoryFilterBottomSheet(
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

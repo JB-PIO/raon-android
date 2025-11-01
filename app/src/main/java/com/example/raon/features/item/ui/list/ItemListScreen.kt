@@ -2,8 +2,7 @@
 
 package com.example.raon.features.item.ui.list
 
-import android.util.Log
-import androidx.compose.foundation.border
+// 2. 공용 모델 import (별칭 사용)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,22 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.RemoveRedEye
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,16 +26,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil3.compose.AsyncImage
-import com.example.raon.features.item.ui.list.model.ItemUiModel
+import com.example.raon.core.ui.component.ItemListComponoents
 import com.example.raon.features.main.ui.MainViewModel
+import com.example.raon.core.ui.model.ItemListUiModel as CoreItemUiModel
 
 
 @Composable
@@ -62,14 +49,25 @@ fun ItemListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val pullToRefreshState = rememberPullToRefreshState()
 
-    Column(modifier = modifier.fillMaxSize()) {
+    // 3. ViewModel의 UI 모델을 공용 컴포넌트의 UI 모델로 변환(매핑)합니다.
+    val coreItems = uiState.items.map { item ->
+        CoreItemUiModel(
+            id = item.id,
+            title = item.title,
+            location = item.location,
+            timeAgo = item.timeAgo,
+            price = item.price,
+            imageUrl = item.imageUrl,
+            comments = item.comments,
+            likes = item.likes,
+            viewCount = item.viewCount,
+            status = item.status,
+            isFavorite = false, // ItemListScreen에서는 찜하기 기능을 사용하지 않으므로 false
 
-        // TopAppBar 호출 시 onLocationClick 전달
-//        HomeScreenTopAppBar(
-//            address = uiState.locationName, // ViewModel의 현재 주소
-//            onNavigateToSearch = onNavigateToSearch,
-//            onLocationClick = onLocationClick // MainView로 클릭 이벤트 전달
-//        )
+        )
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
 
         // Refresh 기능
         PullToRefreshBox(
@@ -80,10 +78,11 @@ fun ItemListScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
 
-                // uiState.items 상테로 바꾸기 -> itemList를 가져와서 UI로 보여줌
-                ItemList(
-                    items = uiState.items,
+                // 4. 기존 ItemList 대신 공용 ItemListComponoents를 호출합니다.
+                ItemListComponoents(
+                    items = coreItems, // 매핑된 리스트 전달
                     onItemClick = onItemClick
+                    // isFavoriteList, onFavoriteClick 등은 기본값(false, empty) 사용
                 )
 
                 if (uiState.isLoading && !uiState.isRefreshing) { // 로딩 상태 중복 방지
@@ -150,135 +149,4 @@ fun HomeScreenTopAppBar(
     }
 }
 
-// [제거] LocationDropdownWithDimming 및 LocationMenuItem 컴포저블은 MainView로 이동
-
-// itemList (기존과 동일)
-@Composable
-fun ItemList(
-    items: List<ItemUiModel>,
-    onItemClick: (Int) -> Unit // 터치한 Item의 ID를 전달
-) {
-    LazyColumn {
-        items(
-            items = items, // 파라미터 사용
-            key = { it.id }
-        ) { item -> // 변수명 변경
-            ItemListItem(
-                item = item,
-                onClick = { onItemClick(item.id) }
-            )
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
-        }
-    }
-}
-
-
-// 각 item Ui (기존과 동일)
-@Composable
-fun ItemListItem(
-    item: ItemUiModel,
-    onClick: () -> Unit // 터치 이벤트 -> ItemDetail 화면을 이동
-) {
-    // 마지막 동만 추출한 텍스트
-    val lastlocation = item.location.split(" ").lastOrNull()
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)   // 클릭함수 넣어주기
-            .padding(16.dp)
-    ) {
-        Log.d("ItemListItem", "imageUrl: ${item.imageUrl}")
-
-        AsyncImage(
-            model = item.imageUrl,
-            contentDescription = item.title,
-            modifier = Modifier
-                .size(100.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Box(
-            modifier = Modifier
-                .height(100.dp)
-                .weight(1f)
-        ) {
-            // 제목, 위치/시간, 가격
-            Column(
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Text(
-                    text = item.title,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    maxLines = 2
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${lastlocation} · ${item.timeAgo}",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                if (item.price > 0) {
-                    Text(
-                        text = "%,d원".format(item.price),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
-                    )
-                }
-            }
-
-            // 조회수, 댓글, 좋아요 표시
-            if (item.viewCount > 0 || item.comments > 0 || item.likes > 0) {
-                Row(
-                    modifier = Modifier.align(Alignment.BottomEnd),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 기존 댓글 UI
-                    if (item.comments > 0) {
-                        Icon(
-                            Icons.Outlined.ChatBubbleOutline,
-                            contentDescription = "댓글",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(text = item.comments.toString(), fontSize = 13.sp, color = Color.Gray)
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-
-
-                    // 기존 좋아요 UI
-                    if (item.likes > 0) {
-                        Icon(
-                            Icons.Outlined.FavoriteBorder,
-                            contentDescription = "좋아요",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(text = item.likes.toString(), fontSize = 13.sp, color = Color.Gray)
-                    }
-
-
-                    // 조회수 아이콘 및 UI
-                    if (item.viewCount > 0) {
-                        Icon(
-                            imageVector = Icons.Outlined.RemoveRedEye, // 눈 모양 아이콘
-                            contentDescription = "조회수",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(2.dp)) // 아이콘과 텍스트 간격
-                        Text(text = item.viewCount.toString(), fontSize = 13.sp, color = Color.Gray)
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-
-                }
-            }
-        }
-    }
-}
+// 5. 기존에 이 파일에 있던 ItemList 및 ItemListItem 함수 정의를 삭제했습니다.

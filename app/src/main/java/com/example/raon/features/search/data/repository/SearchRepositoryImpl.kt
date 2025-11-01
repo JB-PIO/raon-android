@@ -2,10 +2,13 @@ package com.example.raon.features.search.data.repository
 
 
 import android.util.Log
+import com.example.raon.features.search.data.local.RecentSearchDao
+import com.example.raon.features.search.data.local.RecentSearchEntity
 import com.example.raon.features.search.data.remote.api.SearchApiService
 import com.example.raon.features.search.data.remote.dto.toDomain
 import com.example.raon.features.search.domain.repository.SearchRepository
 import com.example.raon.features.search.ui.model.SearchItemUiModel
+import kotlinx.coroutines.flow.Flow
 import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -16,7 +19,8 @@ import javax.inject.Inject
  * Hilt나 Dagger 같은 DI 라이브러리를 통해 SearchApiService를 주입받습니다.
  */
 class SearchRepositoryImpl @Inject constructor(
-    private val apiService: SearchApiService
+    private val apiService: SearchApiService,
+    private val recentSearchDao: RecentSearchDao
 ) : SearchRepository {
 
     /**
@@ -58,7 +62,7 @@ class SearchRepositoryImpl @Inject constructor(
             // 서버 응답(DTO)을 UI에서 사용할 데이터(Domain Model)로 변환합니다.
             val domainModelList = responseDto.data.items.map { it.toDomain() }
 
-            // 👇 성공 로그 추가
+            // 성공 로그 추가
             Log.d("SearchRepository", "✅ 데이터 수신 성공: ${domainModelList.size}개 아이템 수신")
             Log.d("SearchRepository", "✅ 내용: $domainModelList")
 
@@ -71,6 +75,30 @@ class SearchRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+
+    // --- 아래 함수들 구현 ---
+    override fun getRecentSearches(): Flow<List<RecentSearchEntity>> {
+        return recentSearchDao.getRecentSearches()
+    }
+
+    override suspend fun addRecentSearch(query: String) {
+        val search = RecentSearchEntity(
+            query = query,
+            timestamp = System.currentTimeMillis() // 현재 시간 저장
+        )
+        recentSearchDao.insertOrReplace(search)
+    }
+
+    override suspend fun deleteRecentSearch(query: String) {
+        recentSearchDao.delete(query)
+    }
+
+    override suspend fun deleteAllRecentSearches() {
+        recentSearchDao.deleteAll()
+    }
+
+
 }
 
 /**

@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.raon.core.database.AppDatabase
 import com.example.raon.features.category.data.local.CategoryDao
+import com.example.raon.features.search.data.local.RecentSearchDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,7 +27,9 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "raon_database" // 👈 데이터베이스 파일명
-        ).build()
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
     // 2. CategoryDao를 제공하는 방법 (이 부분이 에러 해결의 핵심)
@@ -35,6 +38,14 @@ object DatabaseModule {
     fun provideCategoryDao(appDatabase: AppDatabase): CategoryDao {
         // Hilt가 위에서 만들어준 AppDatabase 객체에서 categoryDao를 꺼내서 제공
         return appDatabase.categoryDao()
+    }
+
+
+    // --- 2. 이 함수를 추가 ---
+    @Provides
+    @Singleton
+    fun provideRecentSearchDao(appDatabase: AppDatabase): RecentSearchDao {
+        return appDatabase.recentSearchDao()
     }
 
     /*

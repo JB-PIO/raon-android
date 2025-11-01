@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -166,7 +167,19 @@ fun ProfileEditScreen(
                                 onClose()
                             }
                         },
-                        enabled = isDoneButtonEnabled
+                        enabled = isDoneButtonEnabled,
+                        //  1. colors 파라미터를 추가합니다.
+                        colors = ButtonDefaults.textButtonColors(
+                            //  2. 활성화 시 배경색
+                            containerColor = BrandYellow,
+                            //  3. 활성화 시 글자색
+                            contentColor = BrandDarkText,
+
+                            //  4. 비활성화 시 배경색
+                            disabledContainerColor = Color.Gray.copy(alpha = 0.2f),
+                            //  5. 비활성화 시 글자색
+                            disabledContentColor = Color.Gray.copy(alpha = 0.7f)
+                        )
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
@@ -211,7 +224,13 @@ fun ProfileEditScreen(
                 onValueChange = viewModel::onNicknameChanged,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("닉네임을 입력하세요") }
+                placeholder = { Text("닉네임을 입력하세요") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = BrandYellow,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedLabelColor = BrandYellow,
+                    unfocusedLabelColor = Color(0xFF9E9E9E)
+                )
             )
         }
     }

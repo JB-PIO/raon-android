@@ -31,6 +31,7 @@ data class SearchResultUiState(
     val sortOption: String = "createdAt,desc", // 기본값: 최신순
     val status: String? = "AVAILABLE",      // 기본값: 판매중
     val categoryId: Int? = null,
+    val categoryName: String? = null, // ✨ 수정: 카테고리 이름 추가
     val locationId: Int? = null,
     val minPrice: Int? = null,
     val maxPrice: Int? = null,
@@ -101,8 +102,14 @@ class SearchResultViewModel @Inject constructor(
     }
 
     /** 카테고리 변경 */
-    fun onCategoryChanged(newCategoryId: Int?) {
-        _uiState.update { it.copy(categoryId = newCategoryId) }
+    // 수정: ID와 Name을 모두 받도록 변경
+    fun onCategoryChanged(newCategoryId: Int?, newCategoryName: String?) {
+        _uiState.update {
+            it.copy(
+                categoryId = newCategoryId,
+                categoryName = newCategoryName
+            )
+        }
         fetchProducts()
     }
 
@@ -154,4 +161,3 @@ class SearchResultViewModel @Inject constructor(
         }
     }
 }
-

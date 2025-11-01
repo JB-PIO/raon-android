@@ -68,7 +68,8 @@ fun SearchItemDto.toDomain(): SearchItemUiModel {
         timeAgo = formatTimeAgo(this.createdAt),
 
         viewCount = this.viewCount,
-        comments = 0
+        comments = 0,
+        status = this.status
     )
 
 }

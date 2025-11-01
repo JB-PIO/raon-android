@@ -120,36 +120,6 @@ fun CategoryScreen(
     }
 }
 
-
-//@Composable
-//private fun Breadcrumb(path: List<String>) {
-//    Row(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(horizontal = 16.dp, vertical = 8.dp),
-//        verticalAlignment = Alignment.CenterVertically
-//    ) {
-//        path.forEachIndexed { index, item ->
-//            val isLastItem = index == path.lastIndex
-//            Text(
-//                text = item,
-//                fontSize = 14.sp,
-//                fontWeight = if (isLastItem) FontWeight.Bold else FontWeight.Normal,
-//                color = if (isLastItem) Color.Black else Color.Gray
-//            )
-//            if (!isLastItem && item != "") {
-//                Text(
-//                    text = " > ",
-//                    fontSize = 14.sp,
-//                    color = Color.Gray,
-//                    modifier = Modifier.padding(horizontal = 4.dp)
-//                )
-//            }
-//        }
-//    }
-//}
-
-
 @Composable
 private fun Breadcrumb(path: List<String>) {
     Row(
@@ -158,7 +128,7 @@ private fun Breadcrumb(path: List<String>) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ✨ 변경 사항 시작: path.forEachIndexed 대신 일반 forEach를 사용하고,
+        // 변경 사항 시작: path.forEachIndexed 대신 일반 forEach를 사용하고,
         //                 리스트의 크기에 따라 > 표시 여부를 결정합니다.
         path.forEachIndexed { index, item ->
             val isLastItem = index == path.lastIndex
@@ -170,7 +140,7 @@ private fun Breadcrumb(path: List<String>) {
                 color = if (isLastItem) Color.Black else Color.Gray
             )
 
-            // ✨ 변경: 마지막 아이템이면서 동시에 path 리스트에 "전체" 외의 다른 아이템이 없을 때만 '>'를 그리지 않습니다.
+            // 변경: 마지막 아이템이면서 동시에 path 리스트에 "전체" 외의 다른 아이템이 없을 때만 '>'를 그리지 않습니다.
             // 즉, path가 ["전체"] 일 때는 '>'를 그리지 않고,
             // path가 ["전체", "남성의류"] 일 때는 "남성의류" 뒤에 '>'를 그리지 않습니다.
             // 그리고 path에 "전체" 외의 다른 아이템이 있다면 (index < path.lastIndex), ">"를 그립니다.

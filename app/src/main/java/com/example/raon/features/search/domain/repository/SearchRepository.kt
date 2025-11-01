@@ -1,6 +1,8 @@
 package com.example.raon.features.search.domain.repository
 
+import com.example.raon.features.search.data.local.RecentSearchEntity
 import com.example.raon.features.search.ui.model.SearchItemUiModel
+import kotlinx.coroutines.flow.Flow
 
 /**
  * 검색 기능에 대한 데이터 소스 규칙을 정의하는 인터페이스입니다.
@@ -37,4 +39,18 @@ interface SearchRepository {
         tradeType: String?,
         status: String?
     ): Result<List<SearchItemUiModel>>
+
+    /** 최근 검색어 목록을 Flow로 가져오기 (최신순) */
+    fun getRecentSearches(): Flow<List<RecentSearchEntity>>
+
+    /** 최근 검색어를 추가 (이미 있으면 시간만 갱신) */
+    suspend fun addRecentSearch(query: String)
+
+    /** 특정 최근 검색어를 삭제 */
+    suspend fun deleteRecentSearch(query: String)
+
+    /** 모든 최근 검색어를 삭제 */
+    suspend fun deleteAllRecentSearches()
+
+
 }

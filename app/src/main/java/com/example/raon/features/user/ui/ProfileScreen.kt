@@ -169,7 +169,7 @@ fun ProfileHeader(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
-                .border(2.dp, BrandYellow, CircleShape),
+                .border(2.dp, Color.LightGray, CircleShape),
             contentScale = ContentScale.Crop
 
         )
@@ -220,7 +220,7 @@ fun ProfileMenuList(
             text = "나의 거래",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
+            color = BrandDarkText,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
         MenuRow(icon = Icons.Filled.ShoppingCart, title = "구매내역", onClick = { /*TODO*/ })
@@ -242,7 +242,7 @@ fun ProfileMenuList(
             text = "기타",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
+            color = BrandDarkText,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
         MenuRow(
