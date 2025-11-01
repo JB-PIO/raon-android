@@ -1,13 +1,16 @@
 package com.example.raon.features.search.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.raon.features.search.domain.repository.SearchRepository
 import com.example.raon.features.search.ui.model.SearchItemUiModel
+import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -37,12 +40,36 @@ data class SearchResultUiState(
 
 @HiltViewModel
 class SearchResultViewModel @Inject constructor(
-    private val searchRepository: SearchRepository
+    private val searchRepository: SearchRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     // UI가 관찰할 단 하나의 상태 객체
     private val _uiState = MutableStateFlow(SearchResultUiState())
     val uiState: StateFlow<SearchResultUiState> = _uiState.asStateFlow()
+
+
+    // 4. ViewModel 초기화 시 DataStore의 값을 로드
+    init {
+        viewModelScope.launch {
+            // DataStore에서 저장된 사용자의 locationId를 가져옴 (첫 번째 값만)
+            // UserRepository.kt에 정의된 함수를 사용합니다.
+            val userLocationId = userRepository.getUserProfile().firstOrNull()?.locationId
+
+
+            Log.d("위치 데이터", "위치 데이터 : $userLocationId")
+
+
+
+
+            if (userLocationId != null) {
+                _uiState.update { currentState ->
+                    currentState.copy(locationId = userLocationId)
+                }
+            }
+        }
+    }
+
 
     // --- UI 이벤트를 처리하는 공개 함수 ---
 
@@ -114,6 +141,11 @@ class SearchResultViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(isLoading = false, products = productList)
                 }
+
+                Log.d("데이터_로딩_성공", "데이터_로딩_성공 minPrice: ${uiState.value.minPrice}")
+                Log.d("데이터_로딩_성공", "데이터_로딩_성공 maxPrice: ${uiState.value.maxPrice}")
+
+
             }.onFailure { exception ->
                 _uiState.update {
                     it.copy(isLoading = false, error = "데이터 로딩 실패: ${exception.message}")

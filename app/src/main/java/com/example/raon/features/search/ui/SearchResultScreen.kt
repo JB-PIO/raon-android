@@ -4,6 +4,7 @@ package com.example.raon.features.search.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -34,6 +37,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Switch
@@ -55,6 +60,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -81,7 +87,7 @@ fun SearchResultScreen(
     // viewModel의 uistate 구독
     val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
 
-    // ✅ 수정: 화면이 처음 나타날 때 전달받은 searchQuery로 검색 시작
+    // 화면이 처음 나타날 때 전달받은 searchQuery로 검색 시작
     LaunchedEffect(key1 = searchQuery) {
         searchViewModel.onSearch(searchQuery)
     }
@@ -122,20 +128,23 @@ fun SearchResultScreen(
             }
         },
     ) { paddingValues ->
-        // ✅ 수정: Box 및 로딩/에러 UI 제거, 원래 Column 구조로 복귀
+        // Box 및 로딩/에러 UI 제거, 원래 Column 구조로 복귀
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // uiState의 가격 정보를 FilterControls로 전달
             FilterControls(
+                minPrice = uiState.minPrice,
+                maxPrice = uiState.maxPrice,
                 onSortClick = { showSortBottomSheet = true },
                 onCategoryClick = { showCategoryBottomSheet = true },
                 onLocationClick = { showLocationBottomSheet = true },
                 onPriceClick = { showPriceBottomSheet = true }
             )
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
-            // ✅ 수정: 임시 데이터인 productList를 전달
+            // 임시 데이터인 productList를 전달
             ProductList(
                 products = uiState.products,
                 onItemClick = onItemClick
@@ -180,23 +189,31 @@ fun SearchResultScreen(
         )
     }
 
+    // PriceFilterBottomSheet 호출
     if (showPriceBottomSheet) {
-        SimpleBottomSheet(
-            title = "가격 설정",
-            content = { Text("가격 설정 내용은 여기에 들어갑니다.") },
+        PriceFilterBottomSheet(
             sheetState = priceBottomSheetState,
+            // 수정됨: 현재 가격 정보를 바텀시트로 전달
+            initialMinPrice = uiState.minPrice,
+            initialMaxPrice = uiState.maxPrice,
             onDismissRequest = {
                 scope.launch { priceBottomSheetState.hide() }.invokeOnCompletion {
                     if (!priceBottomSheetState.isVisible) showPriceBottomSheet = false
                 }
+            },
+            onApplyClick = { min, max ->
+                searchViewModel.onPriceChanged(min, max)
             }
         )
     }
 }
 
 
+// 수정됨: minPrice, maxPrice 파라미터 추가
 @Composable
 fun FilterControls(
+    minPrice: Int?,
+    maxPrice: Int?,
     onSortClick: () -> Unit,
     onLocationClick: () -> Unit,
     onPriceClick: () -> Unit,
@@ -204,33 +221,63 @@ fun FilterControls(
 ) {
     var isChecked by remember { mutableStateOf(true) }
 
+    // 가격 범위에 따라 표시될 텍스트 생성
+    val priceText = when {
+        minPrice != null && maxPrice != null -> {
+            // 10,000원 - 50,000원
+            "%,d원".format(minPrice) + " - " + "%,d원".format(maxPrice)
+        }
+
+        minPrice != null -> {
+            // 10,000원 이상
+            "%,d원".format(minPrice) + " 이상"
+        }
+
+        maxPrice != null -> {
+            // 50,000원 이하
+            "%,d원".format(maxPrice) + " 이하"
+        }
+
+        else -> "가격" // 기본값
+    }
+
+    // 가격 필터가 적용되었는지 확인하는 변수
+    val isPriceFilterApplied = minPrice != null || maxPrice != null
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        // ✅ 1. 간격 조절: 10.dp에서 16.dp로 늘려 상단 바와의 간격을 확보합니다.
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 상단 행: 필터 드롭다운 버튼들
         Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterDropdownButton(text = "최신순", onClick = onSortClick)
             FilterDropdownButton(text = "위치 정렬", onClick = onLocationClick) // 요청에 따라 텍스트 변경
-            FilterDropdownButton(text = "가격", onClick = onPriceClick)
+
+            // "가격" 대신 동적으로 생성된 priceText 사용
+            //  가격 버튼에 isApplied 값을 전달
+            FilterDropdownButton(
+                text = priceText,
+                onClick = onPriceClick,
+                isApplied = isPriceFilterApplied // <-- 여기를 수정
+            )
+
             FilterDropdownButton(text = "카테고리", onClick = onCategoryClick)
         }
 
-        // 하단 행: '판매중만 보기' 스위치
+        // '판매중만 보기' 스위치
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Switch(
                 checked = isChecked,
                 onCheckedChange = { isChecked = it },
-                // ✅ 2. 크기 조절: width/height 고정 대신 scale을 사용해 비율에 맞게 축소합니다.
-                modifier = Modifier.scale(0.75f), // 75% 크기로 줄임
+                modifier = Modifier.scale(0.75f),
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = BrandYellow,
@@ -239,9 +286,7 @@ fun FilterControls(
                 ),
                 thumbContent = null
             )
-            // ✅ 3. (선택) scale로 스위치를 줄이면 스위치 오른쪽의 기본 여백도 줄어듭니다.
-            //    Spacer를 8.dp에서 4.dp 정도로 살짝 줄여주면 텍스트와 더 자연스럽게 붙습니다.
-            Spacer(modifier = Modifier.width(4.dp)) // 8.dp -> 4.dp
+            Spacer(modifier = Modifier.width(4.dp))
             Text("판매중만 보기", fontSize = 14.sp)
         }
     }
@@ -249,20 +294,41 @@ fun FilterControls(
 
 
 @Composable
-fun FilterDropdownButton(text: String, onClick: () -> Unit) {
+fun FilterDropdownButton(
+    text: String,
+    onClick: () -> Unit,
+    isApplied: Boolean = false // "적용됨" 상태를 받는 파라미터 추가
+) {
+
+    // isApplied 값에 따라 색상 결정
+    val borderColor = if (isApplied) BrandYellow else Color.LightGray
+    val backgroundColor = if (isApplied) BrandYellow.copy(alpha = 0.1f) else Color.Transparent
+    val textColor = if (isApplied) Color.Black else Color.Black.copy(alpha = 0.8f)
+    val iconColor = if (isApplied) Color.Black else Color.Gray
+
     Row(
         modifier = Modifier
             .clickable(onClick = onClick)
-            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            // 조건부 배경색 적용
+            .background(backgroundColor, RoundedCornerShape(8.dp))
+            // 조건부 테두리색 적용
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        Text(text, fontSize = 14.sp)
+        Text(
+            text,
+            fontSize = 14.sp,
+            maxLines = 1,
+            color = textColor, // 조건부 텍스트 색상
+            fontWeight = if (isApplied) FontWeight.SemiBold else FontWeight.Normal // 조건부 굵기
+        )
         Icon(
             Icons.Default.KeyboardArrowDown,
             contentDescription = null,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(16.dp),
+            tint = iconColor // 조건부 아이콘 색상
         )
     }
 }
@@ -500,7 +566,6 @@ fun CategoryFilterBottomSheet(
                 fontSize = 20.sp,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
-
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(categories) { category ->
                     Row(
@@ -556,7 +621,7 @@ fun CategoryFilterBottomSheet(
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = Color.Black,
                         contentColor = Color.White
                     ),
                     shape = RoundedCornerShape(8.dp),
@@ -609,6 +674,179 @@ fun SimpleBottomSheet(
             )
             content()
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+
+// initialMinPrice, initialMaxPrice 파라미터 추가
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PriceFilterBottomSheet(
+    sheetState: SheetState,
+    initialMinPrice: Int?,
+    initialMaxPrice: Int?,
+    onDismissRequest: () -> Unit,
+    onApplyClick: (min: Int?, max: Int?) -> Unit
+) {
+    // 상태를 initial 값으로 초기화 (null이면 빈 문자열)
+    var minPrice by remember { mutableStateOf(initialMinPrice?.toString() ?: "") }
+    var maxPrice by remember { mutableStateOf(initialMaxPrice?.toString() ?: "") }
+
+
+    // 1. 입력값을 Int로 즉시 변환
+    val minAsInt = minPrice.toIntOrNull()
+    val maxAsInt = maxPrice.toIntOrNull()
+
+
+    // 2. 실시간으로 에러 상태 계산
+    // (두 값이 모두 null이 아니고, 최소값이 최대값보다 클 때)
+    val isError = minAsInt != null && maxAsInt != null && minAsInt > maxAsInt
+
+    // 텍스트 필드 색상 정의
+    val customTextFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Color.Black, // 터치(포커스) 시 검은색
+        unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f), // 기본 상태 회색
+
+        // 3. 에러 상태일 때의 테두리 색상 (기본 MaterialTheme 색상 사용)
+        errorBorderColor = MaterialTheme.colorScheme.error
+
+
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+
+        dragHandle = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    Modifier
+                        .width(48.dp)
+                        .height(4.dp)
+                        .background(Color.LightGray, RoundedCornerShape(100))
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            // 1. 타이틀
+            Text(
+                text = "가격",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // 2. 가격 입력 필드
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = minPrice,
+                    onValueChange = { minPrice = it },
+                    placeholder = { Text("최소 금액") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    colors = customTextFieldColors,
+
+                    // 4. 실시간 에러 상태를 TextField에 반영
+                    isError = isError
+
+                )
+                Text(
+                    text = "-",
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+
+                OutlinedTextField(
+                    value = maxPrice,
+                    onValueChange = { maxPrice = it },
+                    placeholder = { Text("최대 금액") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    colors = customTextFieldColors,
+// 4. 실시간 에러 상태를 TextField에 반영
+                    isError = isError
+
+                )
+            }
+
+            // 5. 에러 메시지를 isError 값에 따라 표시
+            if (isError) {
+                Text(
+                    text = "최소 금액이 최대 금액보다 높아요", // 이미지와 동일한 텍스트
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp, start = 8.dp)
+                )
+            }
+
+            // 3. 버튼
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 초기화 버튼
+                Button(
+                    onClick = {
+                        minPrice = ""
+                        maxPrice = ""
+                        // 추가됨: ViewModel 상태도 함께 초기화
+                        onApplyClick(null, null)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.LightGray.copy(alpha = 0.5f),
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Text("초기화", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                // 적용하기 버튼
+                Button(
+                    onClick = {
+                        val minAsInt = minPrice.toIntOrNull()
+                        val maxAsInt = maxPrice.toIntOrNull()
+
+                        onApplyClick(minAsInt, maxAsInt)
+
+                        onDismissRequest() // 바텀 시트 닫기
+                    },
+                    modifier = Modifier.weight(1f),
+                    //  6. isError가 true이면 버튼 비활성화
+                    enabled = !isError,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Black,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Text("적용하기", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

@@ -25,6 +25,8 @@ val Dark = Color(0xFF3D405B)
 
 // Raon 대표 색
 
+//val BlackButtonColoer = Color()    // 검정 배경 버튼 색
+
 val DarkGrayText = Color(0xFF3C3C3C)    // 흰 배경 텍스트 색
 
 val BrandYellow = Color(0xFFFDCC31)     // 주로 배경색 (기본)
