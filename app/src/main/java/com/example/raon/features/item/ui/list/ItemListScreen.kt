@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,8 +23,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +52,9 @@ fun ItemListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pullToRefreshState = rememberPullToRefreshState()
+
+    // LazyColumn의 스크롤 상태를 추적할 State 생성
+    val listState = rememberLazyListState()
 
     // 3. ViewModel의 UI 모델을 공용 컴포넌트의 UI 모델로 변환(매핑)합니다.
     val coreItems = uiState.items.map { item ->
@@ -81,11 +88,15 @@ fun ItemListScreen(
                 // 4. 기존 ItemList 대신 공용 ItemListComponoents를 호출합니다.
                 ItemListComponoents(
                     items = coreItems, // 매핑된 리스트 전달
-                    onItemClick = onItemClick
+                    onItemClick = onItemClick,
+                    // 공용 컴포넌트에 listState와 isLoading 상태 전달
+                    listState = listState,
+                    isLoading = uiState.isLoading
                     // isFavoriteList, onFavoriteClick 등은 기본값(false, empty) 사용
                 )
 
-                if (uiState.isLoading && !uiState.isRefreshing) { // 로딩 상태 중복 방지
+                // 최초 로딩 시에만 중앙에 표시 (데이터가 없을 때)
+                if (uiState.isLoading && !uiState.isRefreshing && coreItems.isEmpty()) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
@@ -99,6 +110,29 @@ fun ItemListScreen(
                     )
                 }
             }
+        }
+    }
+
+    // 리스트의 끝에 도달했는지 감지하는 로직
+    val isAtEnd = remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItemsInfo = layoutInfo.visibleItemsInfo
+            if (layoutInfo.totalItemsCount == 0) {
+                false
+            } else {
+                val lastVisibleItem = visibleItemsInfo.lastOrNull()
+                // 마지막으로 보이는 아이템의 인덱스가 (전체 아이템 개수 - 1)과 같은지 확인
+                lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
+            }
+        }
+    }
+
+    // 리스트 끝에 도달했고, 로딩 중이 아닐 때 loadMoreItems 호출
+    LaunchedEffect(isAtEnd.value, uiState.isLoading) {
+        // isAtEnd가 true이고, 추가 로딩(isLoading)이나 새로고침(isRefreshing) 중이 아닐 때
+        if (isAtEnd.value && !uiState.isLoading && !uiState.isRefreshing) {
+            viewModel.loadMoreItems()
         }
     }
 }
@@ -149,4 +183,3 @@ fun HomeScreenTopAppBar(
     }
 }
 
-// 5. 기존에 이 파일에 있던 ItemList 및 ItemListItem 함수 정의를 삭제했습니다.

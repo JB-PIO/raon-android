@@ -27,16 +27,20 @@ data class SearchResultUiState(
     val searchQuery: String = "",
 
     // 2. 필터 및 정렬 관련 전체 상태
-//    val query: String = "",
     val sortOption: String = "createdAt,desc", // 기본값: 최신순
     val status: String? = "AVAILABLE",      // 기본값: 판매중
     val categoryId: Int? = null,
-    val categoryName: String? = null, // ✨ 수정: 카테고리 이름 추가
+    val categoryName: String? = null,
     val locationId: Int? = null,
     val minPrice: Int? = null,
     val maxPrice: Int? = null,
-    val condition: String? = null,          // 예: "USED", "NEW"
-    val tradeType: String? = null           // 예: "DIRECT", "DELIVERY"
+    val condition: String? = null,
+    val tradeType: String? = null,
+
+    // 3. 페이징 관련 상태 추가
+    val currentPage: Int = 0,
+    val canLoadMore: Boolean = true,
+    val isRefreshing: Boolean = false // 상단 Pull-to-Refresh 상태
 )
 
 @HiltViewModel
@@ -49,20 +53,14 @@ class SearchResultViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SearchResultUiState())
     val uiState: StateFlow<SearchResultUiState> = _uiState.asStateFlow()
 
+    // 한 번에 불러올 아이템 개수
+    private val pageSize = 20
 
     // 4. ViewModel 초기화 시 DataStore의 값을 로드
     init {
         viewModelScope.launch {
-            // DataStore에서 저장된 사용자의 locationId를 가져옴 (첫 번째 값만)
-            // UserRepository.kt에 정의된 함수를 사용합니다.
             val userLocationId = userRepository.getUserProfile().firstOrNull()?.locationId
-
-
             Log.d("위치 데이터", "위치 데이터 : $userLocationId")
-
-
-
-
             if (userLocationId != null) {
                 _uiState.update { currentState ->
                     currentState.copy(locationId = userLocationId)
@@ -74,23 +72,23 @@ class SearchResultViewModel @Inject constructor(
 
     // --- UI 이벤트를 처리하는 공개 함수 ---
 
-    /** 검색 시작 */
+    /** 검색 시작 (검색어 입력 후 엔터) */
     fun onSearch(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
-        fetchProducts()
+        refresh()
     }
 
-    /** 검색어 변경 */
+    /** 검색어 변경 (검색창에서 실시간 변경) */
     fun onQueryChanged(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
-        fetchProducts()
+        refresh()
     }
 
 
     /** 정렬 변경 */
     fun onSortChanged(sortValue: String) {
         _uiState.update { it.copy(sortOption = sortValue) }
-        fetchProducts()
+        refresh()
     }
 
     /** 판매 상태 변경 (판매중만 보기 스위치) */
@@ -98,11 +96,10 @@ class SearchResultViewModel @Inject constructor(
         _uiState.update {
             it.copy(status = if (isSaleOnly) "AVAILABLE" else null)
         }
-        fetchProducts()
+        refresh()
     }
 
     /** 카테고리 변경 */
-    // 수정: ID와 Name을 모두 받도록 변경
     fun onCategoryChanged(newCategoryId: Int?, newCategoryName: String?) {
         _uiState.update {
             it.copy(
@@ -110,32 +107,39 @@ class SearchResultViewModel @Inject constructor(
                 categoryName = newCategoryName
             )
         }
-        fetchProducts()
+        refresh()
     }
 
     /** 가격 범위 변경 */
     fun onPriceChanged(min: Int?, max: Int?) {
         _uiState.update { it.copy(minPrice = min, maxPrice = max) }
-        fetchProducts()
+        refresh()
     }
 
-    // ... 필요한 다른 필터 변경 함수들도 동일한 패턴으로 추가 ...
+    /** (수정) Pull-to-Refresh 또는 필터 변경 시 호출되는 "새로고침" 함수 */
+    fun refresh() {
+        // 이미 로딩/새로고침 중이면 중복 실행 방지
+        if (_uiState.value.isLoading || _uiState.value.isRefreshing) return
 
-    // --- 핵심 로직: 데이터를 가져오는 비공개 함수 ---
-
-    private fun fetchProducts() {
         val currentState = _uiState.value
         if (currentState.searchQuery.isBlank()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    isRefreshing = true, // 상단 새로고침 애니메이션 시작
+                    isLoading = false,   // 중앙 로딩은 숨김
+                    error = null,
+                    products = emptyList(), // 목록 비우기
+                    currentPage = 0,
+                    canLoadMore = true
+                )
+            }
 
-            // 현재 UI 상태 객체에 저장된 모든 필터 값을 Repository에 전달
             searchRepository.searchProducts(
                 keyword = currentState.searchQuery,
-//                keyword = currentState.searchQuery,
-                page = 0, // 페이지네이션은 추후 구현
-                size = 20,
+                page = 0, // "새로고침"이므로 0페이지 요청
+                size = pageSize,
                 sort = currentState.sortOption,
                 status = currentState.status,
                 categoryId = currentState.categoryId,
@@ -146,16 +150,67 @@ class SearchResultViewModel @Inject constructor(
                 tradeType = currentState.tradeType
             ).onSuccess { productList ->
                 _uiState.update {
-                    it.copy(isLoading = false, products = productList)
+                    it.copy(
+                        isRefreshing = false, // 새로고침 완료
+                        isLoading = false,
+                        products = productList, // 목록을 새로 교체
+                        currentPage = 1, // 다음 페이지는 1
+                        canLoadMore = productList.size == pageSize
+                    )
                 }
-
-                Log.d("데이터_로딩_성공", "데이터_로딩_성공 minPrice: ${uiState.value.minPrice}")
-                Log.d("데이터_로딩_성공", "데이터_로딩_성공 maxPrice: ${uiState.value.maxPrice}")
-
-
             }.onFailure { exception ->
                 _uiState.update {
-                    it.copy(isLoading = false, error = "데이터 로딩 실패: ${exception.message}")
+                    it.copy(
+                        isRefreshing = false, // 새로고침 실패
+                        isLoading = false,
+                        error = "데이터 로딩 실패: ${exception.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    /** (유지) 스크롤이 끝에 도달했을 때 호출되는 "더 불러오기" 함수 */
+    fun loadMoreItems() {
+        // 로딩/새로고침 중이거나, 더 이상 불러올 데이터가 없으면 중단
+        if (_uiState.value.isLoading || _uiState.value.isRefreshing || !_uiState.value.canLoadMore) {
+            return
+        }
+
+        val currentState = _uiState.value
+        if (currentState.searchQuery.isBlank()) return
+
+        viewModelScope.launch {
+            // "더 불러오기"는 isLoading(하단 스피너)을 사용
+            _uiState.update { it.copy(isLoading = true) }
+
+            searchRepository.searchProducts(
+                keyword = currentState.searchQuery,
+                page = currentState.currentPage, // 현재 페이지 번호로 요청
+                size = pageSize,
+                sort = currentState.sortOption,
+                status = currentState.status,
+                categoryId = currentState.categoryId,
+                locationId = currentState.locationId,
+                minPrice = currentState.minPrice,
+                maxPrice = currentState.maxPrice,
+                condition = currentState.condition,
+                tradeType = currentState.tradeType
+            ).onSuccess { newProductList ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        products = it.products + newProductList, // 기존 목록에 새 목록 "추가"
+                        currentPage = it.currentPage + 1, // 페이지 번호 증가
+                        canLoadMore = newProductList.size == pageSize
+                    )
+                }
+            }.onFailure { exception ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "데이터 로딩 실패: ${exception.message}"
+                    )
                 }
             }
         }

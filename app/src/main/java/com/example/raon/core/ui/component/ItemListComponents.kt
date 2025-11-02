@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RemoveRedEye
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.example.raon.core.ui.model.ItemListUiModel
+import com.example.raon.ui.theme.BrandYellow
 
 /**
  * 여러 화면에서 재사용될 아이템 목록 UI
@@ -47,12 +52,18 @@ import com.example.raon.core.ui.model.ItemListUiModel
 fun ItemListComponoents(
     items: List<ItemListUiModel>,
     onItemClick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     isFavoriteList: Boolean = false,
     onFavoriteClick: (itemId: Int) -> Unit = {},
     showSettingsIcon: Boolean = false,
-    onSettingsClick: (itemId: Int) -> Unit = {}
+    onSettingsClick: (itemId: Int) -> Unit = {},
+    listState: LazyListState = rememberLazyListState(),
+    isLoading: Boolean = false
 ) {
-    LazyColumn {
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize()
+    ) {
         items(
             items = items,
             key = { it.id }
@@ -66,6 +77,22 @@ fun ItemListComponoents(
                 onSettingsClick = { onSettingsClick(item.id) }
             )
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
+        }
+
+        // 리스트 맨 아래에 로딩 인디케이터 표시
+        if (isLoading && items.isNotEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = BrandYellow
+                    )
+                }
+            }
         }
     }
 }

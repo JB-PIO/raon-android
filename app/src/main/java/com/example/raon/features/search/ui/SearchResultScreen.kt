@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,9 +45,12 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +94,10 @@ fun SearchResultScreen(
     // 카테고리 뷰모델 state 구독 (Room DB 최상위 카테고리 목록)
     val categories by categoryViewModel.categories.collectAsStateWithLifecycle()
 
+    // 스크롤 상태와 PullToRefresh 상태 추가
+    val listState = rememberLazyListState()
+    val pullToRefreshState = rememberPullToRefreshState()
+
     // 뷰모델 UI 모델을 공용 컴포넌트 UI 모델로 변환
     val coreItems = uiState.products.map { item ->
         CoreItemUiModel(
@@ -106,8 +115,8 @@ fun SearchResultScreen(
         )
     }
 
-    // 첫 진입 시 searchQuery로 검색 시작
-    LaunchedEffect(key1 = searchQuery) {
+    // 첫 진입 시 searchQuery로 검색 시작 (한 번만 실행되도록 수정)
+    LaunchedEffect(key1 = Unit) {
         searchViewModel.onSearch(searchQuery)
     }
 
@@ -125,14 +134,13 @@ fun SearchResultScreen(
 
     // ==========================================================
     // 1. 정렬 옵션 맵 정의
-    // (API 요청값 <-> 표시 텍스트)
     val sortOptionsMap = remember {
         mapOf(
             "createdAt,desc" to "최신순",
-            "viewCount,desc" to "조회수순", // (서버 명세 확인 필요)
+            "viewCount,desc" to "조회수순",
             "price,asc" to "낮은 가격순",
             "price,desc" to "높은 가격순",
-            "location,asc" to "가까운순"   // (서버 명세 확인 필요)
+            "location,asc" to "가까운순"
         )
     }
 
@@ -147,24 +155,15 @@ fun SearchResultScreen(
             Column(modifier = Modifier.statusBarsPadding()) {
                 SearchAppBar(
                     query = uiState.searchQuery,
-//                    onQueryChange = { newQuery = it },
                     onQueryChange = { newQuery -> searchViewModel.onQueryChanged(newQuery) },
                     false,
-
                     onSearch = { /* 검색 로직 */ },
-                    onBackClick = {
-                        /* 뒤로가기 */
-                        onCloses()
-                    },
-                    onHomeClick = {
-                        /* 홈으로 */
-                        onNavigateToHome()
-                    }
+                    onBackClick = { onCloses() },
+                    onHomeClick = { onNavigateToHome() }
                 )
             }
         },
     ) { paddingValues ->
-        // Box 및 로딩/에러 UI 제거, 원래 Column 구조로 복귀
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -175,8 +174,8 @@ fun SearchResultScreen(
             FilterControls(
                 minPrice = uiState.minPrice,
                 maxPrice = uiState.maxPrice,
-                categoryName = uiState.categoryName, // <--수정
-                currentSortName = currentSortDisplayName, // <-- "최신순" 대신 전달
+                categoryName = uiState.categoryName,
+                currentSortName = currentSortDisplayName,
                 onSortClick = { showSortBottomSheet = true },
                 onCategoryClick = { showCategoryBottomSheet = true },
                 onLocationClick = { showLocationBottomSheet = true },
@@ -185,27 +184,66 @@ fun SearchResultScreen(
             // ==========================================================
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
 
-            // 4. 공용 아이템 리스트 사용
-            ItemListComponoents(
-                items = coreItems,
-                onItemClick = onItemClick
-            )
+            // 4. PullToRefreshBox로 리스트 영역 감싸기
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { searchViewModel.refresh() }, // ViewModel의 refresh 호출
+                modifier = Modifier.fillMaxSize(),
+                state = pullToRefreshState
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 5. 공용 아이템 리스트 사용 (listState, isLoading 전달)
+                    ItemListComponoents(
+                        items = coreItems,
+                        onItemClick = onItemClick,
+                        listState = listState,
+                        isLoading = uiState.isLoading
+                    )
+
+                    // 6. 최초 로딩 시 (아이템이 없을 때) 중앙 스피너 표시
+                    if (uiState.isLoading && !uiState.isRefreshing && coreItems.isEmpty()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // 7. 에러 메시지 표시
+                    uiState.error?.let { message ->
+                        Text(
+                            text = message,
+                            color = Color.Red,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp)
+                        )
+                    }
+
+                    // 8. 검색 결과가 없는 경우
+                    if (!uiState.isLoading && !uiState.isRefreshing && coreItems.isEmpty() && uiState.error == null) {
+                        Text(
+                            text = "'${uiState.searchQuery}'에 대한 검색 결과가 없습니다.",
+                            color = Color.Gray,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 
 
-    // 바텀시트는 Scaffold 외부에 둠 (전체 화면 덮기)
+    // --- 바텀시트들 (기존 코드와 동일) ---
     // ==========================================================
-    // 4. SortBottomSheet 호출부 수정
     if (showSortBottomSheet) {
         SortBottomSheet(
             sheetState = sortBottomSheetState,
-            currentSortOption = uiState.sortOption, // 1. 현재 정렬 값(API) 전달
-            sortOptions = sortOptionsMap,         // 2. 전체 맵 전달
+            currentSortOption = uiState.sortOption,
+            sortOptions = sortOptionsMap,
             onSortSelected = { newSortValue ->
-                // 3. 새 옵션 선택 시 뷰모델에 알림
                 searchViewModel.onSortChanged(newSortValue)
-                // 4. 바텀시트 닫기
                 scope.launch { sortBottomSheetState.hide() }.invokeOnCompletion {
                     if (!sortBottomSheetState.isVisible) showSortBottomSheet = false
                 }
@@ -219,32 +257,27 @@ fun SearchResultScreen(
     }
     // ==========================================================
 
-    // 카테고리 바텀시트
     if (showCategoryBottomSheet) {
         CategoryFilterBottomSheet(
             sheetState = categoryBottomSheetState,
-            categories = categories, // 카테고리 목록 전달
-            currentCategoryId = uiState.categoryId, // 현재 ID 전달
+            categories = categories,
+            currentCategoryId = uiState.categoryId,
             onDismissRequest = {
                 scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
                     if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
                 }
             },
-            onApplyClick = { selectedCategory -> // 콜백 변경 (CategoryEntity? 반환)
-                // 뷰모델 상태 업데이트
+            onApplyClick = { selectedCategory ->
                 searchViewModel.onCategoryChanged(
                     selectedCategory?.categoryId?.toInt(),
                     selectedCategory?.name
                 )
-                // 시트 닫기
                 scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
                     if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
                 }
             },
             onResetClick = {
-                // 뷰모델 상태 초기화
                 searchViewModel.onCategoryChanged(null, null)
-                // 시트 닫기
                 scope.launch { categoryBottomSheetState.hide() }.invokeOnCompletion {
                     if (!categoryBottomSheetState.isVisible) showCategoryBottomSheet = false
                 }
@@ -265,11 +298,9 @@ fun SearchResultScreen(
         )
     }
 
-    // 가격 필터 바텀시트 호출
     if (showPriceBottomSheet) {
         PriceFilterBottomSheet(
             sheetState = priceBottomSheetState,
-            // 현재 가격 정보 전달
             initialMinPrice = uiState.minPrice,
             initialMaxPrice = uiState.maxPrice,
             onDismissRequest = {
@@ -279,14 +310,38 @@ fun SearchResultScreen(
             },
             onApplyClick = { min, max ->
                 searchViewModel.onPriceChanged(min, max)
+                // 닫는 로직은 PriceFilterBottomSheet 내부에서 처리
             }
         )
+    }
+
+    // --- (신규) 페이징 트리거 ---
+
+    // 9. 리스트의 끝에 도달했는지 감지하는 로직
+    val isAtEnd = remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItemsInfo = layoutInfo.visibleItemsInfo
+            if (layoutInfo.totalItemsCount == 0) {
+                false
+            } else {
+                val lastVisibleItem = visibleItemsInfo.lastOrNull()
+                lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
+            }
+        }
+    }
+
+    // 10. 리스트 끝에 도달했고, 로딩 중이 아닐 때 loadMoreItems 호출
+    LaunchedEffect(isAtEnd.value, uiState.isLoading) {
+        if (isAtEnd.value && !uiState.isLoading && !uiState.isRefreshing) {
+            searchViewModel.loadMoreItems()
+        }
     }
 }
 
 
 // ==========================================================
-// FilterControls 함수 수정
+// FilterControls 함수 수정 (기존 코드와 동일)
 @Composable
 fun FilterControls(
     minPrice: Int?,
@@ -387,6 +442,8 @@ fun FilterControls(
 }
 // ==========================================================
 
+// --- 이하 다른 Composable 함수들 (FilterDropdownButton, SortBottomSheet, 등) ---
+// --- (기존 코드와 동일) ---
 
 @Composable
 fun FilterDropdownButton(
@@ -429,23 +486,15 @@ fun FilterDropdownButton(
 }
 
 
-// ProductList 관련 코드 삭제됨
-
-
-// ==========================================================
-// SortBottomSheet 함수 전체 수정
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SortBottomSheet(
     sheetState: SheetState,
-    // 1. 파라미터 변경
-    currentSortOption: String,      // 현재 API 값 (예: "price,asc")
-    sortOptions: Map<String, String>, // 전체 정렬 맵
-    onSortSelected: (String) -> Unit, // 콜백 (API 값 반환)
+    currentSortOption: String,
+    sortOptions: Map<String, String>,
+    onSortSelected: (String) -> Unit,
     onDismissRequest: () -> Unit
 ) {
-    // 2. 로컬 상태 2줄 삭제
-
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
@@ -477,15 +526,12 @@ fun SortBottomSheet(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // 3. 맵으로 루프
             sortOptions.forEach { (apiValue, displayName) ->
-                // 4. isSelected 로직 변경
                 val isSelected = currentSortOption == apiValue
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // 5. 클릭 시 apiValue 콜백 전달
                         .clickable { onSortSelected(apiValue) }
                         .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -493,13 +539,12 @@ fun SortBottomSheet(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = displayName, // 6. displayName 사용
+                            text = displayName,
                             fontSize = 16.sp,
-                            // 7. isSelected 사용
                             color = if (isSelected) BrandYellow else Color.Black,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
-                        if (displayName == "추천순") { // displayName으로 비교
+                        if (displayName == "추천순") {
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 Icons.Filled.Check,
@@ -510,7 +555,6 @@ fun SortBottomSheet(
                         }
                     }
 
-                    // 8. isSelected 사용
                     if (isSelected) {
                         Icon(
                             Icons.Filled.Check,
@@ -525,8 +569,6 @@ fun SortBottomSheet(
         }
     }
 }
-// ==========================================================
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -690,8 +732,6 @@ fun SimpleBottomSheet(
     }
 }
 
-
-// 초기 min/max 파라미터 추가
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PriceFilterBottomSheet(
@@ -701,35 +741,23 @@ fun PriceFilterBottomSheet(
     onDismissRequest: () -> Unit,
     onApplyClick: (min: Int?, max: Int?) -> Unit
 ) {
-    // 상태를 초기값으로 세팅 (null이면 빈 문자열)
     var minPrice by remember { mutableStateOf(initialMinPrice?.toString() ?: "") }
     var maxPrice by remember { mutableStateOf(initialMaxPrice?.toString() ?: "") }
 
-
-    // 1. Int로 변환
     val minAsInt = minPrice.toIntOrNull()
     val maxAsInt = maxPrice.toIntOrNull()
 
-
-    // 2. 실시간 에러 계산
-    // (min > max 이면 에러)
     val isError = minAsInt != null && maxAsInt != null && minAsInt > maxAsInt
 
-    // 텍스트필드 색상 정의
     val customTextFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color.Black, // 포커스 시 검은색
-        unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f), // 기본 상태 회색
-
-        // 3. 에러 시 테두리 색
+        focusedBorderColor = Color.Black,
+        unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f),
         errorBorderColor = MaterialTheme.colorScheme.error
-
-
     )
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-
         dragHandle = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -751,7 +779,6 @@ fun PriceFilterBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
-            // 1. 타이틀
             Text(
                 text = "가격",
                 fontWeight = FontWeight.Bold,
@@ -759,7 +786,6 @@ fun PriceFilterBottomSheet(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // 2. 가격 입력 필드
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -774,18 +800,13 @@ fun PriceFilterBottomSheet(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     colors = customTextFieldColors,
-
-                    // 4. 에러 상태 반영
                     isError = isError
-
                 )
                 Text(
                     text = "-",
                     fontSize = 18.sp,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
-
-
                 OutlinedTextField(
                     value = maxPrice,
                     onValueChange = { maxPrice = it },
@@ -795,35 +816,29 @@ fun PriceFilterBottomSheet(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     colors = customTextFieldColors,
-                    // 4. 에러 상태 반영
                     isError = isError
-
                 )
             }
 
-            // 5. 에러 메시지 표시
             if (isError) {
                 Text(
-                    text = "최소 금액이 최대 금액보다 높아요", // (에러 텍스트)
+                    text = "최소 금액이 최대 금액보다 높아요",
                     color = MaterialTheme.colorScheme.error,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp, start = 8.dp)
                 )
             }
 
-            // 3. 버튼
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 초기화 버튼
                 Button(
                     onClick = {
                         minPrice = ""
                         maxPrice = ""
-                        // 뷰모델 상태도 초기화
                         onApplyClick(null, null)
                     },
                     modifier = Modifier.weight(1f),
@@ -836,18 +851,12 @@ fun PriceFilterBottomSheet(
                 ) {
                     Text("초기화", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-                // 적용하기 버튼
                 Button(
                     onClick = {
-                        val minAsInt = minPrice.toIntOrNull()
-                        val maxAsInt = maxPrice.toIntOrNull()
-
                         onApplyClick(minAsInt, maxAsInt)
-
                         onDismissRequest() // 바텀시트 닫기
                     },
                     modifier = Modifier.weight(1f),
-                    // 6. 에러 시 버튼 비활성화
                     enabled = !isError,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Black,
