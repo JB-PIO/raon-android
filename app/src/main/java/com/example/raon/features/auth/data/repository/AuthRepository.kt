@@ -6,10 +6,12 @@ import com.example.raon.features.auth.data.local.TokenManager
 import com.example.raon.features.auth.data.remote.api.AuthApiService
 import com.example.raon.features.auth.data.remote.dto.LoginRequest
 import com.example.raon.features.auth.data.remote.dto.SignUpRequest
-import com.example.raon.features.auth.ui.viewmodel.LoginResult
-import com.example.raon.features.auth.ui.viewmodel.SignUpResult
+import com.example.raon.features.auth.ui.state.LoginResult // 👈 [수정] state 패키지에서 임포트
+import com.example.raon.features.auth.ui.state.SignUpResult // 👈 [수정] state 패키지에서 임포트
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import java.net.CookieManager
 import javax.inject.Inject
 
@@ -150,7 +152,8 @@ class AuthRepository @Inject constructor(
                                 "[Login] CookieJar 상태 (수동 저장 후): ${cookieManager.cookieStore.cookies}"
                             )
 
-                            LoginResult.Success(loginResponse.message)
+                            // 👈 [수정] object Success 반환 (메시지 삭제)
+                            LoginResult.Success
                         } else {
                             LoginResult.Failure(loginResponse.message)
                         }
@@ -165,7 +168,8 @@ class AuthRepository @Inject constructor(
                 }
 
                 else -> {
-                    LoginResult.Failure("알 수 없는 오류: ${response.code()}")
+                    // 👈 [수정] ServerError 반환 (새 LoginResult 정의에 따름)
+                    LoginResult.ServerError("알 수 없는 오류: ${response.code()}")
                 }
             }
         } catch (e: Exception) {
@@ -179,7 +183,7 @@ class AuthRepository @Inject constructor(
         email: String,
         password: String,
         locationId: Int
-    ): LoginResult {
+    ): SignUpResult { // 👈 [수정] 반환 타입을 SignUpResult로 변경
         return try {
             val request = SignUpRequest(nickname, email, password, locationId)
             val response = apiService.signUp(request)
@@ -268,7 +272,8 @@ class AuthRepository @Inject constructor(
                                 "[Signup] CookieJar 상태 (수동 저장 후): ${cookieManager.cookieStore.cookies}"
                             )
 
-                            SignUpResult.Success(signUpResponse.message)
+                            // 👈 [수정] object Success 반환 (메시지 삭제)
+                            SignUpResult.Success
                         } else {
                             SignUpResult.Failure(signUpResponse.message)
                         }
@@ -282,7 +287,8 @@ class AuthRepository @Inject constructor(
                 }
 
                 else -> {
-                    SignUpResult.Failure("회원가입 실패 (코드: ${response.code()})")
+                    // 👈 [수정] ServerError 반환 (새 SignUpResult 정의에 따름)
+                    SignUpResult.ServerError("회원가입 실패 (코드: ${response.code()})")
                 }
             }
         } catch (e: Exception) {
@@ -320,71 +326,79 @@ class AuthRepository @Inject constructor(
 
     suspend fun refreshToken(): String? {
         Log.d("AuthRepository", "토큰 재발급 API 호출 시도...")
-        return try {
-            val response = apiService.refreshToken()
 
-            if (response.isSuccessful && response.body() != null) {
-                val apiResponse = response.body()!!
-                if (apiResponse.code == "OK" && apiResponse.data?.accessToken != null) {
+        // [수정됨] IO 스레드에서 동기 .execute()를 호출하도록 변경
+        return withContext(Dispatchers.IO) {
+            try {
+                // [수정됨] apiService.refreshToken()은 Call 객체를 반환하므로 .execute() 호출
+                val response = apiService.refreshToken().execute()
 
-                    val newAccessToken = apiResponse.data.accessToken
-                    currentAccessToken = newAccessToken
-                    tokenManager.saveAccessToken(newAccessToken)
-                    Log.d("AuthRepository", "토큰 재발급 성공! 새 AccessToken 저장 완료.")
+                if (response.isSuccessful && response.body() != null) {
+                    val apiResponse = response.body()!!
+                    if (apiResponse.code == "OK" && apiResponse.data?.accessToken != null) {
 
-                    // ▼▼▼▼▼▼ [새 RefreshToken 덮어쓰기 로직 - Secure 수정] ▼▼▼▼▼▼
-                    val cookieHeaders = response.headers().values("Set-Cookie")
-                    val cookieHeader = cookieHeaders.firstOrNull {
-                        it.trim().startsWith("refreshToken=", ignoreCase = true)
-                    }
+                        val newAccessToken = apiResponse.data.accessToken
+                        currentAccessToken = newAccessToken
+                        tokenManager.saveAccessToken(newAccessToken)
+                        Log.d("AuthRepository", "토큰 재발급 성공! 새 AccessToken 저장 완료.")
 
-                    if (cookieHeader != null) {
-                        try {
-                            val uri = serverUri // 상수 사용
-                            val parsedCookies = java.net.HttpCookie.parse(cookieHeader)
-                            val refreshTokenCookie = parsedCookies.firstOrNull {
-                                it.name.equals("refreshToken", ignoreCase = true)
-                            }
-
-                            if (refreshTokenCookie != null) {
-                                val newRefreshTokenValue = refreshTokenCookie.value
-                                // 1. (중요!) 영구 저장소(SharedPreferences) 업데이트
-                                tokenManager.saveRefreshToken(newRefreshTokenValue)
-
-                                // 2. (안정성) 현재 CookieJar(메모리)도 새 값으로 덮어쓰기
-                                val fixedCookie =
-                                    java.net.HttpCookie("refreshToken", newRefreshTokenValue)
-                                        .apply {
-                                            path = "/"
-                                            domain = uri.host
-                                            isHttpOnly = true
-                                            secure = true // [수정] https 이므로 true
-                                        }
-                                cookieManager.cookieStore.add(uri, fixedCookie)
-                                Log.i("TokenDebug", "[Refresh] 🟢 새 RefreshToken 영구 저장/메모리 갱신 성공.")
-                            }
-                        } catch (e: Exception) {
-                            Log.e("TokenDebug", "[Refresh] 🔴 새 RefreshToken 파싱/저장 실패", e)
+                        // ▼▼▼▼▼▼ [새 RefreshToken 덮어쓰기 로직 - Secure 수정] ▼▼▼▼▼▼
+                        val cookieHeaders = response.headers().values("Set-Cookie")
+                        val cookieHeader = cookieHeaders.firstOrNull {
+                            it.trim().startsWith("refreshToken=", ignoreCase = true)
                         }
-                    }
-                    // ▲▲▲▲▲▲ [덮어쓰기 로직 끝] ▲▲▲▲▲▲
 
-                    newAccessToken // 새 AccessToken 반환
+                        if (cookieHeader != null) {
+                            try {
+                                val uri = serverUri // 상수 사용
+                                val parsedCookies = java.net.HttpCookie.parse(cookieHeader)
+                                val refreshTokenCookie = parsedCookies.firstOrNull {
+                                    it.name.equals("refreshToken", ignoreCase = true)
+                                }
+
+                                if (refreshTokenCookie != null) {
+                                    val newRefreshTokenValue = refreshTokenCookie.value
+                                    // 1. (중요!) 영구 저장소(SharedPreferences) 업데이트
+                                    tokenManager.saveRefreshToken(newRefreshTokenValue)
+
+                                    // 2. (안정성) 현재 CookieJar(메모리)도 새 값으로 덮어쓰기
+                                    val fixedCookie =
+                                        java.net.HttpCookie("refreshToken", newRefreshTokenValue)
+                                            .apply {
+                                                path = "/"
+                                                domain = uri.host
+                                                isHttpOnly = true
+                                                secure = true // [수정] https 이므로 true
+                                            }
+                                    cookieManager.cookieStore.add(uri, fixedCookie)
+                                    Log.i(
+                                        "TokenDebug",
+                                        "[Refresh] 🟢 새 RefreshToken 영구 저장/메모리 갱신 성공."
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                Log.e("TokenDebug", "[Refresh] 🔴 새 RefreshToken 파싱/저장 실패", e)
+                            }
+                        }
+                        // ▲▲▲▲▲▲ [덮어쓰기 로직 끝] ▲▲▲▲▲▲
+
+                        newAccessToken // 새 AccessToken 반환
+                    } else {
+                        Log.e("AuthRepository", "API 응답 실패: ${apiResponse.message}")
+                        logout()
+                        null
+                    }
                 } else {
-                    Log.e("AuthRepository", "API 응답 실패: ${apiResponse.message}")
-                    logout()
+                    // 401 (EXP_TOKEN 등) 또는 500 등 서버 오류
+                    Log.e("AuthRepository", "HTTP 오류: ${response.code()} ${response.message()}")
+                    logout() // 토큰이 유효하지 않으므로 로그아웃
                     null
                 }
-            } else {
-                // 401 (EXP_TOKEN 등) 또는 500 등 서버 오류
-                Log.e("AuthRepository", "HTTP 오류: ${response.code()} ${response.message()}")
-                logout() // 토큰이 유효하지 않으므로 로그아웃
+            } catch (e: Exception) {
+                Log.e("AuthRepository", "토큰 재발급 중 예외 발생", e)
+                logout()
                 null
             }
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "토큰 재발급 중 예외 발생", e)
-            logout()
-            null
         }
     }
 }

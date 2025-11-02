@@ -6,6 +6,7 @@ import com.example.raon.features.auth.data.remote.dto.LoginResponse
 import com.example.raon.features.auth.data.remote.dto.RefreshTokenResponse
 import com.example.raon.features.auth.data.remote.dto.SignUpRequest
 import com.example.raon.features.auth.data.remote.dto.SignUpResponse
+import retrofit2.Call // 👈 [추가]
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -32,8 +33,6 @@ interface AuthApiService {
 
     // AccessToken 재발급 요청
     @POST("api/v1/auth/refresh")
-//    suspend fun refreshToken(): ApiResponse<RefreshTokenResponse>
-    suspend fun refreshToken(): Response<ApiResponse<RefreshTokenResponse>> // response로 감싸기
-
-
+    // [수정] suspend를 제거하고 반환 타입을 Call로 변경합니다.
+    fun refreshToken(): Call<ApiResponse<RefreshTokenResponse>>
 }

@@ -22,6 +22,9 @@ val Yellow = Color(0xFFF7EDE2)
 val YelloLight = Color(0xFFFFFFF2)
 val Dark = Color(0xFF3D405B)
 
+// 1. 제안하신 세련된 다크 블루/차콜 그레이
+val TitleColor = Color(0xFF3D405B)
+
 
 // Raon 대표 색
 

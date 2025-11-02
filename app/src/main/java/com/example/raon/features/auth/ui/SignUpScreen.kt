@@ -202,7 +202,9 @@ fun SignUpScreen(
         }
 
         if (uiState.signUpResult == SignUpResult.Loading) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(
+                color = BrandYellow,
+            )
         }
     }
 }

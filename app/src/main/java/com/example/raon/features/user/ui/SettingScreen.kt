@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -72,7 +73,10 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("닫기")
+                    Text(
+                        "닫기",
+                        color = BrandDarkText
+                    )
                 }
             }
         )
@@ -103,7 +107,7 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     title = "채팅 및 활동 알림",
                     checked = isNotificationOn,
-                    onCheckedChange = { isNotificationOn = it }
+                    onCheckedChange = { isNotificationOn = it },
                 )
             }
             item { SettingsCategoryHeader("정보") }
@@ -142,7 +146,7 @@ private fun SettingsCategoryHeader(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
+        color = Color.DarkGray,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp)
     )
@@ -179,7 +183,21 @@ private fun SettingsToggleItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = title, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked, onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                // 켜졌을 때 원형 핸들 색상 (보통 흰색)
+                checkedThumbColor = Color.White,
+                // 켜졌을 때 트랙(배경) 색상 (보라색 계열)
+                checkedTrackColor = BrandYellow, // 예시 보라색
+
+                // --- 비활성화(꺼짐) 상태 색상 (선택 사항) ---
+                // 꺼졌을 때 원형 핸들 색상
+                // uncheckedThumbColor = Color.White,
+                // 꺼졌을 때 트랙(배경) 색상
+                // uncheckedTrackColor = Color.Gray
+            )
+        )
     }
 }
 

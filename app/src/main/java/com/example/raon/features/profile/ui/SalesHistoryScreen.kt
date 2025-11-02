@@ -42,12 +42,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.example.raon.core.ui.component.ItemListComponoents
 import com.example.raon.core.ui.model.ItemListUiModel
+import com.example.raon.ui.theme.BrandDarkText
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -57,6 +59,7 @@ private val statusValues = listOf("AVAILABLE", "RESERVED", "SOLD")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SalesHistoryScreen(
+
     navBackStackEntry: NavBackStackEntry,
     onBackClick: () -> Unit,
     onItemClick: (itemId: Int) -> Unit,
@@ -227,12 +230,31 @@ fun SalesHistoryScreen(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+            PrimaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+
+                containerColor = MaterialTheme.colorScheme.surface, // 예: surface 색상
+                // ▼▼▼ [핵심 수정] 파라미터에 타입을 강제로 명시 ▼▼▼
+                // ▼▼▼ [핵심 수정] 람다 파라미터로 'tabPositions'를 받습니다 ▼▼▼
+//                indicator = { tabPositions ->
+//
+//                    // ▼▼▼ [핵심 수정] pagerState를 사용해 현재 탭의 TabPosition을 전달 ▼▼▼
+//                    if (tabPositions.isNotEmpty()) { // 리스트가 비어있지 않을 때만
+//                        TabRowDefaults.PrimaryIndicator(
+//                            modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+//                            color = BrandYellow
+//                        )
+//                    }
+//                }
+
+            ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = pagerState.currentPage == index,
                         onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text = { Text(title) }
+                        text = { Text(title) },
+                        selectedContentColor = BrandDarkText,
+                        unselectedContentColor = Color.Gray
                     )
                 }
             }

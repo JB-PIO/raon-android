@@ -32,7 +32,10 @@ data class ItemListUiState(
     val locationId: Int? = null, // Int? 타입 유지
 
     val locationName: String = "위치 정보 없음", // 현재 위치 이름 (UI 표시용)
-    val availableLocations: List<LocationUiModel> = emptyList() // 드롭다운 목록
+    val availableLocations: List<LocationUiModel> = emptyList(), // 드롭다운 목록
+
+    // 👇 [수정 1] 다음 페이지가 있는지 여부를 나타내는 플래그 추가 (기본값 true)
+    val hasNextPage: Boolean = true
 )
 
 @HiltViewModel
@@ -117,7 +120,8 @@ class ItemListViewModel @Inject constructor(
                 it.copy(
                     isRefreshing = true, // 새로고침 시작
                     items = emptyList(), // 기존 목록 초기화
-                    currentPage = 0      // 페이지 번호 초기화
+                    currentPage = 0,     // 페이지 번호 초기화
+                    hasNextPage = true   // 👇 [수정 2] 새로고침 시 플래그를 true로 리셋
                 )
             }
             try {
@@ -132,7 +136,9 @@ class ItemListViewModel @Inject constructor(
                         isLoading = false,    // [버그 수정] 로딩 상태 false로 변경
                         items = refreshedItems,
                         currentPage = 1, // 다음 페이지는 1
-                        errorMessage = null
+                        errorMessage = null,
+                        // 👇 [수정 3] 만약 새로고침했는데 아이템이 없으면, 다음 페이지도 없는 것으로 간주
+                        hasNextPage = refreshedItems.isNotEmpty()
                     )
                 }
             } catch (e: Exception) {
@@ -140,7 +146,8 @@ class ItemListViewModel @Inject constructor(
                     it.copy(
                         isRefreshing = false, // 새로고침 실패
                         isLoading = false,    // [버그 수정] 로딩 상태 false로 변경
-                        errorMessage = "데이터를 새로고침하는데 실패했습니다."
+                        errorMessage = "데이터를 새로고침하는데 실패했습니다.",
+                        hasNextPage = false   // 👇 [수정 4] 에러 발생 시 더 이상 로드 시도 안 함
                     )
                 }
             }
@@ -152,7 +159,8 @@ class ItemListViewModel @Inject constructor(
 
     // loadItems (더 로드하기 - Pagination)
     fun loadMoreItems() {
-        if (_uiState.value.isLoading || _uiState.value.isRefreshing) return
+        // 👇 [수정 5] 로딩 중, 새로고침 중, 또는 다음 페이지가 없으면(false) 즉시 중단
+        if (_uiState.value.isLoading || _uiState.value.isRefreshing || !_uiState.value.hasNextPage) return
 
         viewModelScope.launch {
             val currentPage = _uiState.value.currentPage
@@ -184,17 +192,32 @@ class ItemListViewModel @Inject constructor(
                     "Successfully loaded ${newItemsUiModel.size} more items: $newItemsUiModel"
                 )
 
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        items = it.items + newItemsUiModel, // 기존 목록에 새 목록 추가
-                        currentPage = it.currentPage + 1,
-                        itemsImageUrl = it.itemsImageUrl
-                    )
+                // 👇 [수정 6] API 호출 결과를 보고 분기 처리
+                _uiState.update { currentState ->
+                    if (newItemsUiModel.isEmpty()) {
+                        // 만약 빈 리스트가 왔다면, 다음 페이지가 없다고 표시
+                        currentState.copy(
+                            isLoading = false,
+                            hasNextPage = false
+                        )
+                    } else {
+                        // 아이템이 있다면, 기존 목록에 추가하고 페이지 번호 증가
+                        currentState.copy(
+                            isLoading = false,
+                            items = currentState.items + newItemsUiModel,
+                            currentPage = currentState.currentPage + 1,
+                            itemsImageUrl = currentState.itemsImageUrl
+                            // hasNextPage는 true로 유지
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "데이터를 불러오는데 실패했습니다.")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "데이터를 불러오는데 실패했습니다.",
+                        hasNextPage = false // 👇 [수정 7] 에러 발생 시 더 이상 로드 시도 안 함
+                    )
                 }
             }
         }

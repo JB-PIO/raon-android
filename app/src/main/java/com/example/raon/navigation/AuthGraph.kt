@@ -23,7 +23,7 @@ import com.example.raon.features.splash.SplashScreen
  */
 fun NavGraphBuilder.authGraph(
     navController: NavController,
-    mainViewModel: MainViewModel // 👈 [이 부분 추가]
+    mainViewModel: MainViewModel // [이 부분 추가]
 ) {
     navigation(startDestination = "splash", route = "auth_graph") {
 
@@ -51,7 +51,7 @@ fun NavGraphBuilder.authGraph(
                 onNavigateToLogin = { navController.navigate("login") },
                 // [수정] 'signup' 모드로 'location' 호출
                 onNavigateToLocationForSignup = {
-                    navController.navigate("location?mode=signup") // 👈 mode 파라미터 추가
+                    navController.navigate("location?mode=signup") // mode 파라미터 추가
                 }
             )
         }
@@ -59,13 +59,20 @@ fun NavGraphBuilder.authGraph(
         // (기존 코드 동일)
         // Login 화면
         composable("login") {
-            LoginScreen({
-                navController.navigate("main_graph") {
-                    popUpTo("auth") {
-                        inclusive = true
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("main_graph") {
+                        popUpTo("auth") {
+                            inclusive = true
+                        }
                     }
-                }
-            })
+                },
+                onNavigateToSignUp = { // -> 로그인 화면에서 회원가입 이동
+                    navController.navigate("location?mode=signup") {
+                        // 'login' 화면을 백스택에서 제거합니다.
+                        popUpTo("login") { inclusive = true }
+                    }
+                })
         }
 
         // (기존 코드 동일)
@@ -110,7 +117,7 @@ fun NavGraphBuilder.authGraph(
 
             LocationSearchScreen(
                 // 4. [수정] onNavigateToSignup -> onLocationSelected 로 변경
-                onLocationSelected = { location: Location -> // 👈 'location' 객체를 통째로 받음
+                onLocationSelected = { location: Location -> // 'location' 객체를 통째로 받음
                     // 5. [수정] location 객체에서 address와 id를 추출
                     val address = location.address
                     val locationId = location.locationId
@@ -118,7 +125,7 @@ fun NavGraphBuilder.authGraph(
                     if (mode == "signup") {
                         // [기존 기능] 회원가입 플로우
                         navController.navigate("signUp?locationId=${locationId}&location=${address}")
-                    } else if (mode == "favorite") { // 👈 [수정] "favorite" 모드 분기
+                    } else if (mode == "favorite") { // [수정] "favorite" 모드 분기
                         // [새 기능] 즐겨찾기 플로우
                         mainViewModel.addFavoriteLocation(locationId, address)
                         navController.popBackStack()

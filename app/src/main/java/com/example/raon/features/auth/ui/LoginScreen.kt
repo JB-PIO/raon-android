@@ -53,7 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.raon.R
-import com.example.raon.features.auth.ui.viewmodel.LoginResult
+import com.example.raon.features.auth.ui.state.LoginResult
+//import com.example.raon.features.auth.ui.viewmodel.LoginResult
 import com.example.raon.features.auth.ui.viewmodel.LoginViewModel
 import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
@@ -64,6 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onNavigateToSignUp: () -> Unit,
     loginViewModel: LoginViewModel = hiltViewModel()
 ) {
     // UI 상태 관리를 위한 변수들
@@ -240,7 +242,10 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // '회원가입' 텍스트 버튼
-                TextButton(onClick = { /*  회원가입 화면으로 이동 */ }) {
+                TextButton(onClick = {
+                    /*  회원가입 화면으로 이동 */
+                    onNavigateToSignUp()
+                }) {
                     Text(
                         "계정이 없으신가요? 회원가입",
                         color = Color(0xFF666666),

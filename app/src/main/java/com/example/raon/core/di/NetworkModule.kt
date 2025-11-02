@@ -5,8 +5,8 @@ import com.example.raon.core.common.AppConstants
 import com.example.raon.core.network.AuthInterceptor
 import com.example.raon.core.network.TokenAuthenticator
 import com.example.raon.core.network.api.ImageStorageService
+import com.example.raon.features.auth.data.local.TokenManager
 import com.example.raon.features.auth.data.remote.api.AuthApiService
-import com.example.raon.features.auth.data.repository.AuthRepository
 import com.example.raon.features.category.data.remote.api.CategoryApiService
 import com.example.raon.features.chat.data.remote.api.ChatApiService
 import com.example.raon.features.item.data.remote.api.ItemApiService
@@ -60,11 +60,13 @@ object NetworkModule {
         return JavaNetCookieJar(cookieManager)
     }
 
-    // AuthInterceptor는 Hilt로부터 AuthRepository를 주입받습니다.
+    // AuthInterceptor는 Hilt로부터 TokenManager를 주입받습니다.
     @Provides
     @Singleton
-    fun provideAuthInterceptor(authRepository: AuthRepository): AuthInterceptor {
-        return AuthInterceptor(authRepository)
+    fun provideAuthInterceptor(
+        tokenManager: TokenManager // 👈 [이전 작업에서 수정 완료]
+    ): AuthInterceptor {
+        return AuthInterceptor(tokenManager) // 👈 [이전 작업에서 수정 완료]
     }
 
 
@@ -76,9 +78,12 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideTokenAuthenticator(
-        authRepository: AuthRepository
+        // authRepository: AuthRepository // 👈 [제거]
+        authApiService: AuthApiService, // 👈 [추가]
+        tokenManager: TokenManager    // 👈 [추가]
     ): TokenAuthenticator {
-        return TokenAuthenticator(authRepository)
+        // return TokenAuthenticator(authRepository) // 👈 [제거]
+        return TokenAuthenticator(authApiService, tokenManager) // 👈 [수정]
     }
 
     // '토큰 갱신 전용' OkHttpClient (Authenticator가 없어 순환 참조를 방지)
@@ -244,4 +249,3 @@ object NetworkModule {
     }
 
 }
-

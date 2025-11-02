@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.raon.features.auth.data.repository.AuthRepository
+import com.example.raon.features.auth.ui.state.LoginResult // 👈 [수정] state 패키지에서 임포트
 import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -16,17 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-sealed class LoginResult {
-    object Idle : LoginResult()
-    object Loading : LoginResult()
-    data class Success(val message: String) : LoginResult() // 로그인 성공
-    data class Failure(val message: String) : LoginResult() // 로그인 실패
-    data class ServerError(val message: String) : LoginResult() // 서버 에러
+// 👈 [수정] ViewModel 내부에 있던 sealed class LoginResult {} 정의 삭제
 
-    class Error(val message: String) : LoginResult() // 예외상황 발생
-}
-
-// @Inject constructor 사용 => 즉 Hilt 사용해서 context를 직접 주입 하지 않아도 됨
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -65,20 +57,33 @@ class LoginViewModel @Inject constructor(
 
             Log.d("LoginTest", "로그인 ViewModel 시작")
 
-            // 모든 네트워크 로직을 Repository에 위임하고, 결과만 받아서 UI 상태를 업데이트.
+            // 1. [수정] 로그인 API 결과를 변수에 저장
             val result = authRepository.login(email, password)  // 로그인하기
-            _loginResult.value = result
-            Log.d("LoginState", "로그인 상태 $result")
+
+            // 2. [수정] 로그인이 성공했는지 확인
+            if (result is LoginResult.Success) {
+                try {
+                    // 3. [수정] UserRepository를 통해 프로필 정보 가져와서 DataStore에 저장
+                    // 이 함수가 완료될 때까지 기다림 (suspend)
+                    userRepository.fetchAndSaveUserProfile()
+                    Log.d("LoginTest", "User Data 확인 : ${userRepository.getUserProfile()}")
+
+                    // 4. [수정] 프로필 저장까지 모두 성공했을 때 최종 Success 상태로 변경
+                    _loginResult.value = result
+                    Log.d("LoginState", "로그인 상태 $result")
+
+                } catch (e: Exception) {
+                    // 3-1. [수정] 프로필 가져오기 실패 시
+                    Log.e("LoginViewModel", "프로필 가져오기 실패: ${e.message}")
+                    _loginResult.value = LoginResult.Failure("로그인은 성공했으나 프로필을 불러오지 못했습니다.")
+                }
+            } else {
+                // 2-1. [수정] 로그인 자체가 실패한 경우
+                _loginResult.value = result
+                Log.d("LoginState", "로그인 상태 $result")
+            }
+
             Log.d("LoginTest", "로그인 ViewModel 시작2")
-
-
-            // UserRepository를 통해 프로필 정보 가져와서 DataStore에 저장
-            // 이 함수가 성공하든 실패하든 로그인 자체는 성공한 것으로 처리
-            // fetchAndSaveUserProfile() 내부에 API 호출 및 DataStore 저장 로직이 모두 들어있음
-            userRepository.fetchAndSaveUserProfile()
-            Log.d("LoginTest", "User Data 확인 : ${userRepository.getUserProfile()}")
-
-
         }
     }
 }

@@ -4,8 +4,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.raon.features.auth.data.repository.AuthRepository
-import com.example.raon.features.auth.ui.state.SignUpResult
+import com.example.raon.features.auth.ui.state.SignUpResult // 👈 [수정] state 패키지에서 임포트
 import com.example.raon.features.auth.ui.state.SignUpUiState
+import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,21 +15,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-sealed class SignUpResult {
-    object Idle : LoginResult()
-    object Loading : LoginResult()
-    data class Success(val message: String) : LoginResult() // 로그인 성공
-    data class Failure(val message: String) : LoginResult() // 로그인 실패
-    data class ServerError(val message: String) : LoginResult() // 서버 에러
-
-    class Error(val message: String) : LoginResult() // 예외상황 발생
-}
-
+// 👈 ViewModel 내부에 있던 sealed class SignUpResult {} 정의 삭제됨
 
 @HiltViewModel
 class SignUpViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    savedStateHandle: SavedStateHandle // 👈 주입
+    private val userRepository: UserRepository, // 👈 UserRepository 주입
+    savedStateHandle: SavedStateHandle
 
 ) : ViewModel() {
 
@@ -79,7 +72,7 @@ class SignUpViewModel @Inject constructor(
     fun signUp() {
         if (_uiState.value.signUpResult == SignUpResult.Loading) return
 
-        // 1. 빈칸 검사 로직
+        // 1. 빈칸 검사 로직 (기존과 동일)
         val currentState = _uiState.value
         if (currentState.nickname.isBlank() ||
             currentState.email.isBlank() ||
@@ -95,7 +88,7 @@ class SignUpViewModel @Inject constructor(
         }
 
 
-        // 2. 비밀번호 일치 여부 검사
+        // 2. 비밀번호 일치 여부 검사 (기존과 동일)
         if (currentState.password != currentState.passwordCheck) {
             _uiState.update {
                 it.copy(signUpResult = SignUpResult.Failure("비밀번호가 일치하지 않습니다."))
@@ -107,21 +100,33 @@ class SignUpViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(signUpResult = SignUpResult.Loading) }
 
-            // 회원가입 repository 실행
-            val resposen = authRepository.signup(
+            // 1. [수정] 회원가입 repository 실행
+            val signupApiResult = authRepository.signup(
                 currentState.nickname,
                 currentState.email,
                 currentState.password,
                 locationId = currentState.userLocationId
             )
 
-            try {
-                delay(2000) // 가상 네트워크 딜레이
-                _uiState.update { it.copy(signUpResult = SignUpResult.Success) }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(signUpResult = SignUpResult.Failure("회원가입에 실패했습니다: ${e.message}"))
+            // 2. [수정] 회원가입 API가 성공했는지 확인
+            if (signupApiResult is SignUpResult.Success) {
+                try {
+                    // 3. [수정] 프로필 정보를 가져와 DataStore에 저장 (완료될 때까지 기다림)
+                    userRepository.fetchAndSaveUserProfile()
+
+                    // 4. [수정] 프로필 저장까지 성공했을 때 최종 Success 상태로 변경
+                    delay(2000) // (기존 코드에 있던 가상 네트워크 딜레이)
+                    _uiState.update { it.copy(signUpResult = signupApiResult) }
+
+                } catch (e: Exception) {
+                    // 3-1. [수정] 프로필 가져오기 실패 시
+                    _uiState.update {
+                        it.copy(signUpResult = SignUpResult.Failure("회원가입은 성공했으나 프로필을 불러오지 못했습니다: ${e.message}"))
+                    }
                 }
+            } else {
+                // 2-1. [수정] 회원가입 자체가 실패한 경우 (signupApiResult가 Failure 등일 때)
+                _uiState.update { it.copy(signUpResult = signupApiResult) }
             }
         }
     }

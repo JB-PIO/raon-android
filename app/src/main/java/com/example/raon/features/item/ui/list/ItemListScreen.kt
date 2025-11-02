@@ -128,10 +128,11 @@ fun ItemListScreen(
         }
     }
 
-    // 리스트 끝에 도달했고, 로딩 중이 아닐 때 loadMoreItems 호출
-    LaunchedEffect(isAtEnd.value, uiState.isLoading) {
+    // 👇 [수정 8] LaunchedEffect가 uiState.hasNextPage 값의 변경을 감지하도록 키에 추가
+    LaunchedEffect(isAtEnd.value, uiState.isLoading, uiState.hasNextPage) {
         // isAtEnd가 true이고, 추가 로딩(isLoading)이나 새로고침(isRefreshing) 중이 아닐 때
-        if (isAtEnd.value && !uiState.isLoading && !uiState.isRefreshing) {
+        // 👇 [수정 9] 그리고 다음 페이지가 있을 때(hasNextPage == true)만 로드
+        if (isAtEnd.value && !uiState.isLoading && !uiState.isRefreshing && uiState.hasNextPage) {
             viewModel.loadMoreItems()
         }
     }
@@ -182,4 +183,3 @@ fun HomeScreenTopAppBar(
         }
     }
 }
-
