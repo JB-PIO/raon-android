@@ -40,4 +40,20 @@ interface UserRepository {
     suspend fun addFavoriteLocation(id: Int, name: String)
     // ---------------------------------------------
 
+
+    /**
+     * 서버에 로그아웃을 요청합니다.
+     * (기존 withdrawAccount에서 이름 변경)
+     */
+    suspend fun signOut(): ApiResult<Unit> // <--- 함수명 변경
+    // -------------------------------------------------
+
+
+    /**
+     * 서버에 회원탈퇴(계정 삭제)를 요청하고,
+     * 성공 시 로컬 DataStore의 사용자 정보도 삭제합니다.
+     */
+    suspend fun deleteAccount(): ApiResult<Unit>
+    // -------------------------------------------------
+
 }

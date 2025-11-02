@@ -145,5 +145,55 @@ class UserRepositoryImpl @Inject constructor(
         userDataStore.addFavoriteLocation(id, name)
     }
 
+    /**
+     * 로그아웃 구현
+     * (기존 withdrawAccount에서 이름 변경)
+     */
+    override suspend fun signOut(): ApiResult<Unit> { // <--- 함수명 변경
+        Log.d(
+            "Logout",
+            "UserRepository: 서버 로그아웃 API (POST /api/v1/auth/sign-out) 요청 시작..."
+        ) // <--- 로그 수정
+
+        // 1. 서버에 로그아웃 API 호출
+        val apiResult = handleApi { userApiService.signOut() }.map { } // <--- 호출할 함수명 변경
+
+        if (apiResult is ApiResult.Success) {
+            Log.i("Logout", "✅ 서버 로그아웃 성공.") // <--- 로그 수정
+            // 로그아웃 시에는 로컬 프로필 정보를 지우지 않습니다.
+            // userDataStore.clear() // <-- 이 코드는 회원탈퇴 시에만 필요하므로 주석 처리 (또는 삭제)
+        } else {
+            Log.e("Logout", "❌ 서버 로그아웃 실패: $apiResult") // <--- 로그 수정
+        }
+
+        // 3. ViewModel에 API 호출 결과 반환
+        return apiResult
+    }
+    // ---------------------------------------------------
+
+
+    // ------------------ [이 부분 추가] ------------------
+    /**
+     * 회원탈퇴 구현
+     */
+    override suspend fun deleteAccount(): ApiResult<Unit> {
+        Log.d("Withdrawal", "UserRepository: 회원탈퇴 API (DELETE /api/v1/me) 요청 시작...")
+
+        // 1. 서버에 계정 삭제 API 호출
+        val apiResult = handleApi { userApiService.deleteAccount() }.map { }
+
+        // 2. [중요] 서버 요청이 성공했을 때만 로컬 DataStore의 사용자 프로필 데이터 삭제
+        if (apiResult is ApiResult.Success) {
+            Log.i("Withdrawal", "✅ 서버 탈퇴 성공. 로컬 UserProfile 데이터를 삭제합니다.")
+            userDataStore.clear() // <-- 계정이 삭제됐으니 로컬 프로필도 삭제
+        } else {
+            Log.e("Withdrawal", "❌ 서버 탈퇴 실패: $apiResult")
+        }
+
+        // 3. ViewModel에 API 호출 결과 반환
+        return apiResult
+    }
+    // ---------------------------------------------------
+
 
 }

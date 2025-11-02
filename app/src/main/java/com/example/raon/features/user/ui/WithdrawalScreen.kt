@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.raon.ui.theme.BrandDarkText
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +88,7 @@ fun WithdrawalScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("취소")
+                    Text("취소", color = BrandDarkText)
                 }
             }
         )
@@ -133,7 +135,11 @@ fun WithdrawalScreen(
                 ) {
                     Checkbox(
                         checked = uiState.agreedToTerms,
-                        onCheckedChange = { viewModel.onAgreementChanged(it) }
+                        onCheckedChange = { viewModel.onAgreementChanged(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.error
+                        )
+
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("위의 내용을 모두 확인했으며, 계정 삭제에 동의합니다.")

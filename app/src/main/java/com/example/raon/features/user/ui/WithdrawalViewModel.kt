@@ -1,10 +1,11 @@
-package com.example.raon.features.user.ui // SettingsViewModel과 같은 경로에 생성
+package com.example.raon.features.user.ui // SettingsScreen과 같은 경로
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.raon.features.auth.data.repository.AuthRepository
+import com.example.raon.core.network.ApiResult
+import com.example.raon.features.user.domain.repository.UserRepository
+import com.example.raon.features.user.domain.usecase.LogoutUseCase // AuthRepository 대신 UseCase 사용
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -27,7 +28,8 @@ sealed class WithdrawalEvent {
 
 @HiltViewModel
 class WithdrawalViewModel @Inject constructor(
-    private val authRepository: AuthRepository // 실제 사용하는 Repository로 변경
+    private val userRepository: UserRepository, // 서버 탈퇴 API 호출용
+    private val logoutUseCase: LogoutUseCase      // 로컬 토큰 삭제용
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WithdrawalUiState())
@@ -44,10 +46,11 @@ class WithdrawalViewModel @Inject constructor(
     }
 
     /**
-     * UI에서 회원탈퇴 버튼을 눌렀을 때 호출됩니다.
+     * UI에서 회원탈TAE 버튼을 눌렀을 때 호출됩니다.
+     * "진짜" 회원탈퇴 로직으로 변경
      */
     fun withdrawAccount() {
-        // 동의하지 않았다면 에러 이벤트를 발생시키고 함수를 종료합니다.
+        // 동의 체크 확인
         if (!_uiState.value.agreedToTerms) {
             viewModelScope.launch {
                 _eventFlow.emit(WithdrawalEvent.ShowError("탈퇴 안내를 확인하고 동의해주세요."))
@@ -56,30 +59,35 @@ class WithdrawalViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) } // 로딩 상태 시작
+            _uiState.update { it.copy(isLoading = true) } // 로딩 시작
             try {
 
-                // 토큰 삭제
-                authRepository.logout()
+                // 1. 서버에 회원탈퇴 API 호출 ("deleteAccount" 호출)
+                val result = userRepository.deleteAccount()
 
+                if (result is ApiResult.Success) {
+                    // 2. 서버 탈퇴 성공 시, 로컬 토큰/데이터도 완전 삭제 (로그아웃)
+                    logoutUseCase()
 
-                // TODO: 실제 회원탈퇴 API 호출 로직을 여기에 구현합니다.
-                // val result = authRepository.withdraw()
-                // if (result.isSuccess) {
-                //     _eventFlow.emit(WithdrawalEvent.WithdrawalSuccess)
-                // } else {
-                //     _eventFlow.emit(WithdrawalEvent.ShowError("회원탈퇴에 실패했습니다."))
-                // }
+                    // 3. 화면에 성공 이벤트 전달
+                    _eventFlow.emit(WithdrawalEvent.WithdrawalSuccess)
 
-                // --- API 호출 테스트용 임시 코드 (실제 구현 시 삭제) ---
-                delay(1500) // 1.5초간 로딩하는 척
-                _eventFlow.emit(WithdrawalEvent.WithdrawalSuccess)
-                // ---------------------------------------------------
+                } else {
+                    // 4. 서버 탈퇴 실패 시 에러 메시지 전달
+                    val errorMessage = when (result) {
+                        is ApiResult.Error -> result.errorBody?.message ?: "회원탈퇴에 실패했습니다."
+                        is ApiResult.Exception -> "네트워크 오류가 발생했습니다."
+                        else -> "알 수 없는 오류가 발생했습니다." // Success 외 모든 경우
+                    }
+                    _eventFlow.emit(WithdrawalEvent.ShowError(errorMessage))
+                }
 
             } catch (e: Exception) {
+                // 5. 알 수 없는 예외 처리
                 _eventFlow.emit(WithdrawalEvent.ShowError(e.message ?: "알 수 없는 오류가 발생했습니다."))
             } finally {
-                _uiState.update { it.copy(isLoading = false) } // 성공/실패 여부와 관계없이 로딩 종료
+                // 6. 성공/실패 여부와 관계없이 로딩 종료
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

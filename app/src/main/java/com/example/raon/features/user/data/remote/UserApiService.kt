@@ -7,8 +7,10 @@ import com.example.raon.features.user.data.dto.UpdateProfileImageRequest
 import com.example.raon.features.user.data.dto.UpdateUserLocation
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
+import retrofit2.http.POST
 
 interface UserApiService {
 
@@ -38,4 +40,20 @@ interface UserApiService {
     @PATCH("api/v1/me/location") // 404 에러의 원인. "profile" -> "location"으로 수정
     suspend fun updateUserLocation(@Body request: UpdateUserLocation): Response<Unit>
     // -------------------------------------------------------------
+
+    /**
+     * 로그아웃 (서버 토큰 무효화)
+     * 함수명을 withdrawAccount -> signOut으로 변경
+     */
+    @POST("api/v1/auth/sign-out")
+    suspend fun signOut(): Response<SimpleApiResponse> // <--- 함수명 변경
+    // ---------------------------------------------------
+
+
+    /**
+     * 회원탈퇴 (계정 영구 삭제)
+     */
+    @DELETE("api/v1/me")
+    suspend fun deleteAccount(): Response<SimpleApiResponse>
+    // ---------------------------------------------------
 }
