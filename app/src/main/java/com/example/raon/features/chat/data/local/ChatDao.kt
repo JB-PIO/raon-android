@@ -29,10 +29,11 @@ interface ChatDao {
     @Query("SELECT * FROM chat_rooms ORDER BY lastMessageTime DESC")
     fun getChatRooms(): Flow<List<ChatRoomEntity>>
 
-    // 🔽🔽🔽 [필수 추가] 채팅 목록 실시간 갱신을 위한 함수 🔽🔽🔽
+    // 🔽🔽🔽 [수정됨] 반환 타입이 'suspend fun ...'에서 'suspend fun ...: Int'로 변경
     /**
      * 채팅방의 마지막 메시지, 시간, 안 읽은 개수를 업데이트합니다.
      * 안 읽은 개수(unreadCount)는 기존 값 + 1을 해줍니다.
+     * @return 업데이트에 성공한 행의 수 (Int)
      */
     @Query(
         """
@@ -45,7 +46,30 @@ interface ChatDao {
             chatroomId = :roomId
     """
     )
-    suspend fun updateChatRoomSummary(roomId: Long, lastMessage: String, lastMessageTime: String)
+    suspend fun updateChatRoomSummary(
+        roomId: Long,
+        lastMessage: String,
+        lastMessageTime: String
+    ): Int // 👈 [수정] ': Int' 추가
+
+
+    // 내가 보냈을 때는 이걸로 적용하기
+    @Query(
+        """
+        UPDATE chat_rooms 
+        SET 
+            lastMessage = :lastMessage, 
+            lastMessageTime = :lastMessageTime, 
+            unreadCount = unreadCount  
+        WHERE 
+            chatroomId = :roomId
+    """
+    )
+    suspend fun updateMyChatRoomSummary(
+        roomId: Long,
+        lastMessage: String,
+        lastMessageTime: String
+    ): Int // 👈 [수정] ': Int' 추가
 
 
     // ▼▼▼ [신규 추가] MainViewModel에서 읽음 처리를 위해 호출할 함수 ▼▼▼

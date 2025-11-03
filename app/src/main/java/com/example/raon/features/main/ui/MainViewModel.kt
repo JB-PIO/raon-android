@@ -1,6 +1,5 @@
 package com.example.raon.features.main.ui
 
-//import com.example.raon.core.service.ChatService // [추가] ChatService import
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -23,11 +22,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -53,7 +52,7 @@ class MainViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val savedStateHandle: SavedStateHandle,
     private val imageStorageRepository: ImageStorageRepository,
-    private val stompService: StompService // 👈 [수정 2] StompService 주입
+    private val stompService: StompService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -125,7 +124,7 @@ class MainViewModel @Inject constructor(
             Log.d("MainViewModel", "ChatService는 이미 실행 중입니다.")
         }
 
-        // [유지] 서버 데이터를 가져와 'Room DB'에 저장
+        // [유지] 서버 데이터를 가져와 'Room DB'에 저장 (초기 로드)
         loadInitialData()
 
         // [유지] SavedStateHandle (읽음 처리)
@@ -144,14 +143,19 @@ class MainViewModel @Inject constructor(
                             "ChatReadDebug",
                             "5. Processed and removed chatId from SavedStateHandle."
                         )
+                        delay(2000L)
 
-                        // 👈 [수정 4] 읽음 처리 직후에도 목록 갱신 (unreadCount 반영)
+                        // 읽음 처리 직후에도 목록 갱신 (unreadCount 반영)
                         refreshChatList()
+//                        loadInitialData()
                     }
+
+//                    refreshChatList()
+
                 }
         }
 
-        // ▼▼▼ [수정된 부분] 새 채팅방 생성 후 복귀 시 강제 갱신 로직 추가 ▼▼▼
+        // [유지] 새 채팅방 생성 후 복귀 시 강제 갱신 로직
         viewModelScope.launch {
             savedStateHandle.getStateFlow<Boolean?>("new_chat_created", null)
                 .collect { isNew ->
@@ -162,22 +166,31 @@ class MainViewModel @Inject constructor(
                     }
                 }
         }
-        // ▲▲▲ [수정 완료] ▲▲▲
 
-        // 👈 [수정 4] STOMP 메시지 구독 (실시간 갱신)
+        // ▼▼▼ [수정됨] STOMP 메시지 구독 및 DB 캐싱 로직 (Unit 반환에 맞춤) ▼▼▼
         viewModelScope.launch {
-            Log.d("MainViewModel_STOMP", "STOMP 'messages' Flow 구독 시작")
-            stompService.messages
-                .debounce(1500L) // 1.5초간 메시지 폭주 방지
-                .collect { messageJson ->
-                    // 어떤 메시지든 받으면 (새 채팅방이든, 기존 채팅방이든)
-                    // 채팅방 목록 전체를 서버로부터 다시 받아옵니다.
-                    Log.d("MainViewModel_STOMP", "🔥 STOMP 메시지 수신 (Debounced)! 채팅 목록을 갱신합니다.")
-                    Log.d("MainViewModel_STOMP", " > 수신 메시지(참고용): $messageJson")
+            Log.d("MainViewModel_STOMP", "STOMP 메시지 수신 및 DB 캐싱 처리 시작")
+            try {
+                // 1. Repository의 cacheStompMessages()는 Unit을 반환합니다.
+                //    새 채팅방 감지 및 임시 엔티티 삽입은 Repository 내부에서 처리됩니다.
+                //    따라서 ViewModel에서 별도의 반환값 확인 및 refreshChatList() 호출이 필요 없습니다.
+                chatRepository.cacheStompMessages()
 
-                    refreshChatList() // 2단계에서 만든 함수 호출
-                }
+
+                // 2. Repository가 Unit을 반환하므로, 기존의 `val isNewRoom = ...` 코드를 삭제합니다.
+                // 3. Repository가 DB를 갱신하면 `chatRoomsFlow`가 자동으로 새 데이터를 받아 UI가 갱신됩니다.
+
+                /* * ❌ 주석 처리된 기존 코드 (타입 미스매치 발생 지점)
+                 * val isNewRoom = chatRepository.cacheStompMessages()
+                 * if (isNewRoom) { ... refreshChatList() ... }
+                 */
+
+            } catch (e: Exception) {
+                // 이 예외는 STOMP 연결 취소/종료 시 주로 발생합니다.
+                Log.e("MainViewModel_STOMP", "STOMP 메시지 처리 중 오류 발생/취소", e)
+            }
         }
+        // ▲▲▲ [수정 완료] ▲▲▲
     }
 
     // [유지] 서비스 시작 함수
@@ -188,15 +201,10 @@ class MainViewModel @Inject constructor(
         ContextCompat.startForegroundService(context, serviceIntent)
     }
 
-    // [유지] (로그아웃 함수가 여기 있다면) 서비스 중지 함수
-    /**
-     * 사용자가 로그아웃을 요청할 때 호출됩니다.
-     */
+    // [유지] 서비스 중지 함수
     fun handleLogout() {
         viewModelScope.launch {
-            // TODO: DataStore의 유저 정보/토큰 삭제 로직 (예: userRepository.clearAllData())
-
-            // ChatService를 중지시킴
+            // TODO: DataStore의 유저 정보/토큰 삭제 로직
             stopChatService()
         }
     }
@@ -211,8 +219,7 @@ class MainViewModel @Inject constructor(
 
 
     /**
-     * 👈 [수정 3] 신규 함수: 채팅 목록만 서버에서 새로고침하고 Room DB를 덮어씁니다.
-     * (백그라운드 갱신용 - isLoading 상태를 건드리지 않음)
+     * [유지] 신규 함수: 채팅 목록만 서버에서 새로고침하고 Room DB를 덮어씁니다.
      */
     private fun refreshChatList() {
         viewModelScope.launch {
@@ -251,11 +258,13 @@ class MainViewModel @Inject constructor(
                                     )
                                 }
                             }
+                            // 🔽 Presigned URL을 반영한 ChatRoomInfo 생성
                             chatRoomInfo.copy(viewableThumbnailUrl = thumbnailUrl)
                         }
                     }.awaitAll()
 
                 try {
+                    // 🔽 Room DB에 캐싱 (DB 덮어쓰기)
                     chatRepository.cacheChatRoomList(chatListWithUrls)
                     Log.d("MainViewModel_Refresh", "✅ Fetched list (with URLs) saved to Room.")
                 } catch (e: Exception) {
@@ -268,24 +277,20 @@ class MainViewModel @Inject constructor(
                     "❌ Chat list fetch failed. Will use cached data if available."
                 )
             }
-            // (isLoading = false) 로직은 여기서 제거!
         }
     }
 
 
-    // 👈 [수정 4] 기존 loadInitialData 함수 수정
+    // [유지] 초기 데이터 로드 함수 (채팅 목록 로직은 refreshChatList() 사용)
     private fun loadInitialData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            // ▼▼▼ [수정] 채팅방 로직을 refreshChatList() 호출로 변경 ▼▼▼
-            val chatRoomsJob = async { refreshChatList() }
+            val chatRoomsJob = async { refreshChatList() } // 채팅 목록 새로고침
             val userProfileJob = async { userRepository.fetchAndSaveUserProfile() }
 
-            // ▼▼▼ [수정] chatRoomsJob.await() 추가, profileResult는 뒤에서 await ▼▼▼
-            chatRoomsJob.await()
-            val profileResult = userProfileJob.await()
-            // ▲▲▲ [수정] ▲▲▲
+            chatRoomsJob.await() // 채팅방 로드 완료 대기
+            val profileResult = userProfileJob.await() // 프로필 로드 완료 대기
 
 
             // ▼▼▼ 프로필 로직 (유지) ▼▼▼
@@ -314,11 +319,6 @@ class MainViewModel @Inject constructor(
             }
             // ▲▲▲ 프로필 로직 (유지) ▲▲▲
 
-
-            // ▼▼▼ [삭제] 기존 채팅 목록 로직은 refreshChatList()로 이동했으므로 여기선 삭제 ▼▼▼
-            // if (chatResult is ApiResult.Success) { ... } 블록 전체 삭제
-            // ▲▲▲ [삭제] ▲▲▲
-
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -334,8 +334,7 @@ class MainViewModel @Inject constructor(
     }
 
 
-    // ---------------- [유지] ----------------
-    // (위치 관련 로직은 STOMP와 무관하므로 모두 유지합니다)
+    // ---------------- [유지] 위치 관련 로직 ----------------
 
     fun selectNewMainLocation(location: LocationUiModel) {
         Log.d("LocationUpdate", "🚀 selectNewMainLocation 호출됨")
@@ -361,7 +360,7 @@ class MainViewModel @Inject constructor(
     }
     // ---------------------------------------------------
 
-    // [유지] onCleared()에서 STOMP 연결 해제 로직 삭제
+    // [유지] onCleared()
     override fun onCleared() {
         Log.d("MainViewModel", "onCleared: ViewModel 파괴")
         super.onCleared()

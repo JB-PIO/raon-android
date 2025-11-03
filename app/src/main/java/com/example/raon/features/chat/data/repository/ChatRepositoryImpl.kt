@@ -41,6 +41,9 @@ class ChatRepositoryImpl @Inject constructor(
     private val gson: Gson
 ) : ChatRepository {
 
+    // 💡 [추가] STOMP 캐싱 로직이 현재 실행 중인지 확인하는 플래그
+    private var isStompCachingRunning = false
+
     // ▼▼▼ 1. HTTP GET으로 과거 메시지를 불러오는 실제 구현 ▼▼▼
     override suspend fun getMessageList(
         chatId: Long,
@@ -105,6 +108,13 @@ class ChatRepositoryImpl @Inject constructor(
                     // 🔽 [충돌 해결] 'SendMessageResponseDto.toEntity()' 매퍼 사용 (하단 정의)
                     val entity = responseDto.toEntity()
                     chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
+
+                    val updatedRows = chatDao.updateMyChatRoomSummary(
+                        roomId = entity.roomId,
+                        lastMessage = entity.content,
+                        lastMessageTime = entity.sendTime, // Entity의 원본 시간
+
+                    )
                     Log.d("ChatRepository", "✅ 전송 성공 메시지 Room DB 저장 완료")
                 } catch (e: Exception) {
                     Log.e("ChatRepository", "sendMessage DB 저장 실패", e)
@@ -149,9 +159,18 @@ class ChatRepositoryImpl @Inject constructor(
 
     /**
      * STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
-     * MainViewModel이 이 함수를 호출할 것입니다.
+     * [수정됨] 새 채팅방 감지 및 추가 로직을 포함합니다.
      */
     override suspend fun cacheStompMessages() {
+
+        // 1. 💡 [수정] 이미 실행 중이면 로그를 남기고 즉시 종료합니다.
+        if (isStompCachingRunning) {
+            Log.d("ChatRepository", "⚠️ STOMP 메시지 캐싱이 이미 실행 중입니다. 중복 호출을 무시합니다.")
+            return
+        }
+
+        // 2. 💡 [수정] 플래그를 설정하고, try-finally 구문을 사용하여 종료 시 플래그를 해제합니다.
+        isStompCachingRunning = true
         Log.d("ChatRepository", "🚀 Starting STOMP message caching...")
         try {
             // stompService.messages를 구독하여 DB에 저장
@@ -165,15 +184,34 @@ class ChatRepositoryImpl @Inject constructor(
                     chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
                     Log.d("ChatRepository", "STOMP 메시지 DB 저장 성공")
 
-                    // 채팅방 목록 테이블도 업데이트
-                    chatDao.updateChatRoomSummary(
+                    // ▼▼▼ [수정] 2단계: '스마트' 업데이트 로직 (새 채팅방 감지) ▼▼▼
+                    // 2-1. 채팅방 목록 테이블 업데이트 시도 (ChatDao.kt가 :Int를 반환한다고 가정)
+                    val updatedRows = chatDao.updateChatRoomSummary(
                         roomId = entity.roomId,
                         lastMessage = entity.content,
                         lastMessageTime = entity.sendTime // Entity의 원본 시간
                     )
-                    Log.d("ChatRepository", "STOMP 채팅방 요약 DB 업데이트 성공")
+
+                    // 2-2. [핵심] 만약 업데이트된 행이 0개라면 (updatedRows == 0),
+                    //      이것은 '새로운 채팅방'이라는 의미입니다.
+                    if (updatedRows == 0) {
+                        Log.d(
+                            "ChatRepository",
+                            "🔥 STOMP: 새로운 채팅방(${entity.roomId}) 감지! Placeholder Entity를 생성합니다."
+                        )
+                        // 2-3. 임시 채팅방 정보를 생성하여 Room DB에 INSERT
+                        createPlaceholderChatRoom(entity)
+                    } else {
+                        Log.d("ChatRepository", "STOMP: 기존 채팅방(${entity.roomId}) 요약 DB 업데이트 성공")
+                    }
+                    // ▲▲▲ [수정] 완료 ▲▲▲
+
                 } catch (e: Exception) {
                     Log.e("ChatRepository", "STOMP 메시지 파싱 또는 DB 저장 실패", e)
+                } finally {
+                    // 3. 💡 [수정] 예외나 취소로 collect가 종료되면 플래그를 해제합니다.
+                    isStompCachingRunning = false
+                    Log.d("ChatRepository", "STOMP message caching collector terminated.")
                 }
             }
         } catch (e: CancellationException) {
@@ -183,6 +221,37 @@ class ChatRepositoryImpl @Inject constructor(
             Log.e("ChatRepository", "STOMP caching collect 실패", e)
         }
     }
+
+
+    // ▼▼▼ [신규] '최소한의 변경'을 위한 새 임시 채팅방 생성 함수 추가 ▼▼▼
+    /**
+     * STOMP 메시지만으로 '임시' ChatRoomEntity를 생성합니다.
+     * (이미지, 닉네임, 상품ID 등은 없음)
+     */
+    private suspend fun createPlaceholderChatRoom(message: ChatMessageEntity) {
+        // 주의: 내 닉네임(Buyer/Seller 중 누구인지)을 알 수 없으므로 임시로 '...' 처리
+        // ViewModel에서 정식 목록을 불러올 때 이 정보가 채워집니다.
+        val placeholderRoom = ChatRoomEntity(
+            chatroomId = message.roomId,
+            opponentProfileUrl = null, // Presigned URL 정보가 없으므로 null
+            lastMessage = message.content,
+            lastMessageTime = message.sendTime,
+            unreadCount = 1, // 새 메시지이므로 1
+            productId = 0, // 정보가 없으므로 0
+            sellerId = 0, // 정보가 없으므로 0
+            buyerId = 0, // 정보가 없으므로 0
+            sellerNickname = message.senderName, // STOMP 메시지에서 받은 닉네임
+            buyerNickname = "..." // 임시값
+        )
+
+        try {
+            chatDao.insertChatRooms(listOf(placeholderRoom))
+            Log.d("ChatRepository", "✅ STOMP: Placeholder 채팅방(${message.roomId}) Room DB 저장 완료")
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "❌ STOMP: Placeholder 채팅방 저장 실패", e)
+        }
+    }
+    // ▲▲▲ [신규] 추가 완료 ▲▲▲
 
 
     override suspend fun disconnectStomp() {
@@ -346,9 +415,9 @@ fun ChatMessageDto.toEntity(): ChatMessageEntity {
         senderProfileUrl = this.sender.profileImage,
         content = this.content,
         sendTime = this.sentAt, // Entity의 String (정렬용)
-        messageType = if (this.imageUrl != null) "IMAGE" else "TEXT",
+        messageType = if (this.imageUrl != null) "IMAGE" else "MESSAGE",
         isRead = false, // STOMP로 받은 건 기본적으로 '안 읽음'
-        imageUrl = null // 🔽 [충돌 해결] DTO에 없으므로 null
+        imageUrl = this.imageUrl // 🔽 [충돌 해결] DTO에 없으므로 null
     )
 }
 
@@ -363,9 +432,9 @@ fun SendMessageResponseDto.toEntity(): ChatMessageEntity {
         senderProfileUrl = this.sender.profileImage,
         content = this.content,
         sendTime = this.sentAt, // Entity의 String (정렬용)
-        messageType = if (this.imageUrl != null) "IMAGE" else "TEXT",
+        messageType = if (this.imageUrl != null) "IMAGE" else "MESSAGE",
         isRead = true, // 내가 보낸 건 항상 읽음
-        imageUrl = null // 🔽 [충돌 해결] DTO에 없으므로 null
+        imageUrl = this.imageUrl // 🔽 [충돌 해결] DTO에 없으므로 null
     )
 }
 
