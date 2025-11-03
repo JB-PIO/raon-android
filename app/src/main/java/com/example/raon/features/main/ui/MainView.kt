@@ -35,7 +35,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect // 🔽🔽🔽 [필수 Import]
+// [삭제] import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,15 +45,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLifecycleOwner // 🔽🔽🔽 [필수 Import]
+// [삭제] import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle // 🔽🔽🔽 [필수 Import]
-import androidx.lifecycle.LifecycleEventObserver // 🔽🔽🔽 [필수 Import]
-import androidx.lifecycle.LifecycleOwner // 🔽🔽🔽 [필수 Import]
+// [삭제] import androidx.lifecycle.Lifecycle
+// [삭제] import androidx.lifecycle.LifecycleEventObserver
+// [삭제] import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -83,55 +83,53 @@ fun MainView(
     mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel
 ) {
 
-    // 🔽🔽🔽 [필수 추가] 생명주기 감지 및 STOMP 연결/해제 🔽🔽🔽
+    // 🔽🔽🔽 [삭제] 🔽🔽🔽
+    // STOMP 연결/해제 로직은 ChatService가 담당하므로
+    // View의 생명주기에 맞춰 연결/해제하던 이 블록 전체가 필요 없어졌습니다.
+    /*
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                // 앱이 화면에 다시 보일 때 (홈 화면에서 복귀 등)
                 Lifecycle.Event.ON_RESUME -> {
-                    mainViewModel.connectToStomp()
+                    mainViewModel.connectToStomp() // <--- 이 함수가 더 이상 존재하지 않음
                 }
-                // 앱이 배경으로 사라질 때 (홈 화면 누름 등)
                 Lifecycle.Event.ON_PAUSE -> {
-                    mainViewModel.disconnectFromStomp()
+                    mainViewModel.disconnectFromStomp() // <--- 이 함수가 더 이상 존재하지 않음
                 }
-
-                else -> {} // ON_CREATE, ON_START, ON_STOP, ON_DESTROY 등
+                else -> {}
             }
         }
-
-        // 옵저버 추가
         lifecycleOwner.lifecycle.addObserver(observer)
-
-        // Composable이 화면에서 사라질 때 옵저버 제거
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-    // 🔼🔼🔼 여기까지 추가 🔼🔼🔼
+    */
+    // 🔼🔼🔼 [삭제] 🔼🔼🔼
 
 
-    // ------------------ [이 부분 추가] ------------------
-    // MainView가 Composable 트리에 들어오는 순간 권한 요청 로직 실행
+    // ------------------ [유지] ------------------
+    // 알림 권한 요청은 ChatService가 알림을 띄우기 위해
+    // 여전히 필요하므로 유지합니다.
     RequestNotificationPermission()
     // ---------------------------------------------------
 
 
-    // [수정] ViewModel에서 실제 데이터 가져오기
+    // [유지] ViewModel에서 실제 데이터 가져오기
     val userProfile by mainViewModel.userProfile.collectAsStateWithLifecycle()
     val favoriteLocations by mainViewModel.favoriteLocations.collectAsStateWithLifecycle()
 
     val fullAddress = userProfile?.address
     val mainAddressName = fullAddress?.split(" ")?.lastOrNull()
 
-    // [추가] 현재 위치를 LocationUiModel로 변환
+    // [유지] 현재 위치를 LocationUiModel로 변환
     val currentLocation = userProfile?.let {
         LocationUiModel(id = it.locationId, name = it.address)
     }
 
-    val mainUiState by mainViewModel.uiState.collectAsState()
+    val mainUiState by mainViewModel.uiState.collectAsState() // [수정] collectAsStateWithLifecycle() 권장
     val bottomNavController = rememberNavController()
 
     var isLocationMenuOpen by remember { mutableStateOf(false) }
@@ -144,12 +142,11 @@ fun MainView(
         NavItem("프로필", Icons.Default.Person, "profile"),
     )
 
-    // Scaffold를 Box로 감싸기
+    // (이하 Scaffold 및 NavHost 코드는 모두 동일하게 유지)
     Box(
         modifier = modifier.fillMaxSize()
     ) {
         Scaffold(
-            // Scaffold 자체는 Box 안에서 전체를 채기.
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
@@ -212,11 +209,9 @@ fun MainView(
             }
 
         ) { innerPadding ->
-            // NavHost는 Scaffold의 content 영역에만 배치하기
             NavHost(
                 navController = bottomNavController,
                 startDestination = navItemList[0].route,
-                // NavHost가 innerPadding을 적용하여 Top/Bottom Bar 영역을 피합니다.
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize()
@@ -238,7 +233,6 @@ fun MainView(
                 composable("chatRoomList") {
                     ChatListScreen(
                         onChatRoomClick = { chatRoomId, opponentId, itemId ->
-                            // [수정] AppNavigation.kt의 정의와 일치하도록 수정
                             navController.navigate("chatRoom/$chatRoomId")
                             Log.d(
                                 "ChatClick",
@@ -266,19 +260,18 @@ fun MainView(
             }
         }
 
-        // 드롭다운과 그림자를 Scaffold의 *형제*로 뺍니다.
+        // (드롭다운 로직도 동일하게 유지)
         LocationDropdownWithDimmingOnMain(
             isMenuOpen = isLocationMenuOpen,
-            availableAddresses = favoriteLocations, // 👈 [수정] ViewModel의 실제 즐겨찾기 목록
-            currentLocation = currentLocation, // 👈 [수정] ViewModel의 실제 현재 위치
-            selectedAddressName = fullAddress ?: "위치 없음", // 👈 [수정] ViewModel의 실제 주소
+            availableAddresses = favoriteLocations,
+            currentLocation = currentLocation,
+            selectedAddressName = fullAddress ?: "위치 없음",
             topBarHeight = 56.dp,
             onAddressSelected = { location ->
-                mainViewModel.selectNewMainLocation(location) // 👈 [수정] ViewModel 함수 호출
+                mainViewModel.selectNewMainLocation(location)
                 isLocationMenuOpen = false
             },
             onNavigateToAddAddress = {
-                // [수정] 올바른 경로("location")와 "favorite" 모드로 호출
                 navController.navigate("location?mode=favorite")
                 isLocationMenuOpen = false
             },
@@ -289,16 +282,16 @@ fun MainView(
 
 
 // ----------------------------------------------------------------------
-// 부속 컴포저블
+// 부속 컴포저블 (변경 없음)
 // ----------------------------------------------------------------------
 
 @Composable
 fun LocationDropdownWithDimmingOnMain(
     isMenuOpen: Boolean,
     availableAddresses: List<LocationUiModel>,
-    currentLocation: LocationUiModel?, // 👈 [수정] 현재 위치 추가
+    currentLocation: LocationUiModel?,
     selectedAddressName: String,
-    topBarHeight: Dp, // 고정 Dp 또는 동적 Dp를 받음
+    topBarHeight: Dp,
     onAddressSelected: (LocationUiModel) -> Unit,
     onNavigateToAddAddress: () -> Unit,
     onDismiss: () -> Unit
@@ -309,7 +302,7 @@ fun LocationDropdownWithDimmingOnMain(
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = Modifier
-            .fillMaxSize() // 이제 이 fillMaxSize가 진짜 화면 전체를 덮습니다.
+            .fillMaxSize()
             .zIndex(10f)
     ) {
         Spacer(
@@ -331,9 +324,9 @@ fun LocationDropdownWithDimmingOnMain(
         exit = fadeOut(),
         modifier = Modifier
             .fillMaxWidth(0.6f)
-            .zIndex(11f) // 그림자 위에 위치
-            .statusBarsPadding() // 상단 상태바 영역을 피합니다.
-            .padding(start = 16.dp, top = topBarHeight) // 상태바 아래 + TopAppBar 높이만큼 띄웁니다.
+            .zIndex(11f)
+            .statusBarsPadding()
+            .padding(start = 16.dp, top = topBarHeight)
     ) {
         Column(
             modifier = Modifier
@@ -342,10 +335,9 @@ fun LocationDropdownWithDimmingOnMain(
                 .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
                 .padding(vertical = 4.dp)
         ) {
-            // [수정] 1. 즐겨찾기 목록 (최대 2개)
+            // 1. 즐겨찾기 목록
             availableAddresses.forEach { location ->
                 LocationMenuItem(
-                    // 👈 [수정] 분리 로직을 여기서 적용
                     text = location.name.split(" ").lastOrNull() ?: location.name,
                     isSelected = location.name == selectedAddressName
                 ) {
@@ -353,22 +345,19 @@ fun LocationDropdownWithDimmingOnMain(
                 }
             }
 
-            // [수정] 2. 현재 위치 (즐겨찾기에 없는 경우에만 표시)
+            // 2. 현재 위치
             currentLocation?.let {
-                // ID로 비교하여 즐겨찾기에 이미 있는지 확인
                 val isAlreadyInFavorites = availableAddresses.any { it.id == currentLocation.id }
 
                 if (!isAlreadyInFavorites) {
-                    // 즐겨찾기가 1개라도 있으면 구분선 추가
                     if (availableAddresses.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     }
                     LocationMenuItem(
-                        // 👈 [수정] 분리 로직을 여기서 적용
                         text = it.name.split(" ").lastOrNull() ?: it.name,
                         isSelected = it.name == selectedAddressName
                     ) {
-                        onAddressSelected(it) // 동일한 콜백 사용
+                        onAddressSelected(it)
                     }
                 }
             }
@@ -377,7 +366,7 @@ fun LocationDropdownWithDimmingOnMain(
 
             // 내 동네 설정
             LocationMenuItem(
-                text = "주소 추가", // [수정] 여기는 분리 로직을 적용 안 함
+                text = "주소 추가",
                 isSelected = false
             ) {
                 onNavigateToAddAddress()
@@ -390,9 +379,8 @@ fun LocationDropdownWithDimmingOnMain(
 @Composable
 fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
-        text = text, // [수정] 분리 로직을 여기서 제거
+        text = text,
         style = MaterialTheme.typography.titleMedium,
-        // [수정] 요청하신 대로 색상과 굵기 변경
         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
         color = if (isSelected) BrandDarkText else Color.Gray,
         modifier = Modifier
@@ -403,24 +391,19 @@ fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 
-// 알림 권한 물어보기 UI
+// (알림 권한 요청 로직도 동일하게 유지)
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun RequestNotificationPermission() {
-    // Android 13 (API 33) 이상에서만 POST_NOTIFICATIONS 권한 필요
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
 
-        // 1. 권한 상태를 관리하는 객체를 가져옵니다. (주석 해제)
         val notificationPermissionState = rememberPermissionState(
             permission = Manifest.permission.POST_NOTIFICATIONS
         )
 
-        // 2. MainView가 로드될 때 (단 한 번) 실행합니다. (주석 해제)
         LaunchedEffect(Unit) {
             when {
-                // 권한이 부여되지 않은 상태에서만 요청
                 !notificationPermissionState.status.isGranted -> {
-                    // 권한 요청 다이얼로그를 띄웁니다.
                     notificationPermissionState.launchPermissionRequest()
                 }
             }
