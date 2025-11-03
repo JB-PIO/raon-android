@@ -1,5 +1,8 @@
 package com.example.raon.features.chat.ui
 
+// [수정] DTO(ChatRoomInfo) 대신 Domain Model(ChatRoom)을 import 합니다.
+// ▼▼▼ [신규] 시간 포맷팅을 위한 Import 추가 ▼▼▼
+// ▲▲▲ [신규] 시간 포맷팅을 위한 Import 추가 ▲▲▲
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,12 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
-// [수정] DTO(ChatRoomInfo) 대신 Domain Model(ChatRoom)을 import 합니다.
+import com.example.raon.core.common.toInstant
+import com.example.raon.core.common.toKSTLocalDateTime
+import com.example.raon.core.common.toRelativeTimeString
 import com.example.raon.features.chat.domain.model.ChatRoom
 import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
-import java.time.OffsetDateTime
-import java.time.temporal.ChronoUnit
 
 
 /**
@@ -193,29 +196,18 @@ private fun ChatListItem(
     }
 }
 
-// 시간 포맷팅을 위한 헬퍼 함수
-@Composable
-// [수정] Domain Model의 lastMessageTime은 null이 아니므로 String을 받습니다.
+// ▼▼▼ [수정됨] ▼▼▼
+// 1. @Composable 어노테이션 제거
+// 2. 내부 파싱 로직을 검증된 TimeExtensions 함수로 변경
 private fun formatTimeAgo(dateTimeString: String): String {
     if (dateTimeString.isEmpty()) return ""
     return try {
-        // Z(UTC) 정보가 없는 시간이므로 "T"를 추가하고 임의의 Z를 붙여 OffsetDateTime으로 파싱
-        val createdTime = OffsetDateTime.parse(dateTimeString.replace(" ", "T") + "Z")
-        val now = OffsetDateTime.now()
-
-        val minutes = ChronoUnit.MINUTES.between(createdTime, now)
-        val hours = ChronoUnit.HOURS.between(createdTime, now)
-        val days = ChronoUnit.DAYS.between(createdTime, now)
-
-        when {
-            minutes < 1 -> "방금 전"
-            minutes < 60 -> "${minutes}분 전"
-            hours < 24 -> "${hours}시간 전"
-            days < 7 -> "${days}일 전"
-            else -> "${createdTime.monthValue}월 ${createdTime.dayOfMonth}일"
-        }
+        // 프로젝트의 검증된 시간 파서 (TimeExtensions.kt)를 사용합니다.
+        // (String -> Instant -> KSTLocalDateTime -> "방금 전")
+        dateTimeString.toInstant()?.toKSTLocalDateTime()?.toRelativeTimeString() ?: ""
     } catch (e: Exception) {
         Log.e("ChatListScreen", "formatTimeAgo 파싱 실패: $dateTimeString", e)
-        "시간 정보 없음"
+        "시간 정보 없음" // 파싱 실패 시 대체 텍스트
     }
 }
+// ▲▲▲ [수정됨] ▲▲▲

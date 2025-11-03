@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 
@@ -131,24 +132,46 @@ class MainViewModel @Inject constructor(
                 initialValue = emptyList()
             )
 
+    // ▼▼▼ [수정된 부분] ▼▼▼
+    companion object {
+        // MainViewModel 인스턴스가 여러 개 생성되더라도,
+        // DB 저장 Collector는 앱에서 단 한 번만 실행되도록 보장하는 플래그
+        private val isCacheCollectorRunning = AtomicBoolean(false)
+    }
+    // ▲▲▲ [수정된 부분] ▲▲▲
 
     init {
-        // 1. MainViewModel 시작 시 STOMP 연결 (동일)
-        viewModelScope.launch {
-            Log.d("MainViewModel", "🚀 Initializing STOMP connection...")
-            // chatRoomId는 StompService에서 사용하지 않으므로 0L 전달
-            chatRepository.connectStomp(0L)
-            Log.d("MainViewModel", "✅ STOMP connection attempt initiated.")
-        }
+        // 1. (STOMP 연결 코드는 connectToStomp() 함수로 분리됨 - 기존 코드 유지)
 
-        // 2. [수정] 알림 및 'Room DB' 업데이트를 위해 메시지 구독
+        // ▼▼▼ [수정된 부분] ▼▼▼
+        // 2. [수정] STOMP 메시지 수신 및 DB 저장 (SSoT 전담)
+        // compareAndSet: "현재 값이 false이면 true로 바꾸고, true를 반환"
+        // 이 로직을 통해 앱 전체에서 이 블록이 단 한 번만 실행되도록 보장합니다.
+        if (isCacheCollectorRunning.compareAndSet(false, true)) {
+            viewModelScope.launch {
+                try {
+                    Log.d("MainViewModel", "🚀🚀🚀 STOMP DB Caching Collector 시작 (최초 1회) 🚀🚀🚀")
+                    // (ChatRepositoryImpl에 구현된 cacheStompMessages 호출)
+                    chatRepository.cacheStompMessages()
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "❌ STOMP Caching (DB Save) Coroutine 실패", e)
+                }
+            }
+        } else {
+            // 이미 다른 MainViewModel 인스턴스가 Collector를 실행 중
+            Log.d("MainViewModel", "🔵 STOMP DB Caching Collector는 이미 실행 중입니다.")
+        }
+        // ▲▲▲ [수정된 부분] ▲▲▲
+
+        // 3. [수정] 알림을 위해 '단순' 메시지 구독 (DB 저장 X)
+        // (이 함수는 이제 DB 저장을 하지 않는 'observeMessages'를 호출하므로 안전함)
         observeGlobalMessages()
 
-        // 3. [수정] 서버 데이터를 가져와 'Room DB'에 저장
+        // 4. [수정] 서버 데이터를 가져와 'Room DB'에 저장 (기존 코드와 동일)
         loadInitialData()
 
 
-        //  [수정] ViewModel이 직접 결과를 감시 (내부 로직 변경)
+        // 5. [수정] SavedStateHandle (기존 코드와 동일)
         viewModelScope.launch {
             savedStateHandle.getStateFlow<Long?>("read_chat_room_id", null)
                 .collect { readChatId ->
@@ -172,12 +195,46 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // [수정] STOMP 메시지 수신 시 Room DB 업데이트
+    // (connectToStomp 함수는 기존과 동일)
+    fun connectToStomp() {
+        Log.d("MainViewModel", "STOMP 연결 시도 (ON_RESUME)")
+        viewModelScope.launch {
+            try {
+                // 1. STOMP 연결
+                chatRepository.connectStomp(0L) // (0L은 현재 코드 기준)
+
+                // 2. [권장] 재연결 시, 혹시 놓친 데이터가 있는지 채팅방 목록을 다시 동기화
+                chatRepository.getChatRoomList(page = 0)
+                Log.d("MainViewModel", "✅ STOMP 연결 및 채팅 목록 동기화 시도 완료")
+
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "❌ STOMP 연결 시도 실패", e)
+            }
+        }
+    }
+
+    // (disconnectFromStomp 함수는 기존과 동일)
+    fun disconnectFromStomp() {
+        Log.d("MainViewModel", "STOMP 연결 해제 (ON_PAUSE)")
+        viewModelScope.launch {
+            try {
+                chatRepository.disconnectStomp()
+                Log.d("MainViewModel", "✅ STOMP 연결 해제 완료")
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "❌ STOMP 연결 해제 실패", e)
+            }
+        }
+    }
+
+
+    // [수정] 이 함수는 이제 DB 저장을 하지 않는 observeMessages를 호출합니다.
     private fun observeGlobalMessages() {
         viewModelScope.launch {
-            chatRepository.observeMessages(0L) // (Repo에서 이미 Room DB를 업데이트 함)
+            chatRepository.observeMessages(0L) // (Repo에서 DB 저장을 안 함)
                 .catch { e -> Log.e("MainViewModel", "❌ STOMP global observe error", e) }
                 .collect { messageJson ->
+                    // DB 저장은 cacheStompMessages가 알아서 하므로,
+                    // 여기서는 알림 로직에만 집중합니다.
                     try {
                         val messageDto = gson.fromJson(messageJson, ChatMessageDto::class.java)
 
@@ -202,16 +259,12 @@ class MainViewModel @Inject constructor(
                                 // [CASE 2: 채팅방 불일치]
                                 Log.d("NotificationDebug", "판단: CASE 2 (다른 화면). 헤드업 알림 시도.")
                                 chatNotificationHelper.showChatNotification(messageDto)
-                                // [삭제] updateChatListFromMessage(messageDto)
-                                // (Repo의 observeMessages가 Room을 업데이트했으므로 chatRoomsFlow가 자동 반영)
                             }
                         } else {
                             // --- 앱이 백그라운드일 때 ---
                             // [CASE 3: 백그라운드]
                             Log.d("NotificationDebug", "판단: CASE 3 (백그라운드). 기본 알림 시도.")
                             chatNotificationHelper.showChatNotification(messageDto)
-                            // [삭제] updateChatListFromMessage(messageDto)
-                            // (Repo의 observeMessages가 Room을 업데이트했으므로 chatRoomsFlow가 자동 반영)
                         }
                         // --- 분기 로직 끝 ---
 
@@ -394,10 +447,9 @@ class MainViewModel @Inject constructor(
 
     // 4. MainViewModel 종료 시 STOMP 연결 해제 (로그아웃 시에도 호출 필요)
     override fun onCleared() {
-        viewModelScope.launch {
-            Log.d("MainViewModel", "onCleared: Disconnecting STOMP...")
-            chatRepository.disconnectStomp()
-        }
+        Log.d("MainViewModel", "onCleared: Disconnecting STOMP...")
+        // 🔽 [수정] 새로 만든 disconnect 함수를 여기서도 호출
+        disconnectFromStomp()
         super.onCleared()
     }
 }

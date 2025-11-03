@@ -47,9 +47,16 @@ interface ChatRepository {
     suspend fun connectStomp(chatRoomId: Long)
 
     /**
-     * 구독 중인 STOMP 메시지 흐름(Flow)을 제공합니다.
+     * [수정] 구독 중인 STOMP 메시지 흐름(Flow)을 '단순히' 제공합니다.
+     * (이 함수는 더 이상 DB에 쓰지 않습니다)
      */
     fun observeMessages(chatId: Long): Flow<String>
+
+    /**
+     * [신설] STOMP 메시지를 구독하며 Room DB에 저장(캐시)하는 함수.
+     * 이 함수는 SSoT를 위해 앱에서 '단 한 번만' 호출되어야 합니다.
+     */
+    suspend fun cacheStompMessages()
 
 
     /**

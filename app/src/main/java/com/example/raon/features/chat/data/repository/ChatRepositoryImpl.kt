@@ -29,7 +29,6 @@ import com.example.raon.features.chat.domain.repository.ChatRepository
 import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -139,45 +138,52 @@ class ChatRepositoryImpl @Inject constructor(
     }
 
     /**
-     * [수정] STOMP 메시지('ChatMessageDto'로 추정)를 Room DB에 저장한 뒤,
-     * 기존과 동일하게 원본 String Flow를 ViewModel로 반환합니다.
+     * [수정] 이 함수는 이제 DB 업데이트 로직을 '제거'하고,
+     * 원본 STOMP Flow를 그대로 반환합니다.
      */
     override fun observeMessages(chatId: Long): Flow<String> {
         Log.d(
             "ChatRepository",
-            "🚀 Observing messages (with DB save) for : ${stompService.messages}"
+            "🚀 Observing messages (No DB save) for : ${stompService.messages}"
         )
+        // DAO 로직을 모두 제거하고 stompService.messages를 직접 반환
+        return stompService.messages
+    }
 
-        return flow {
-            try {
-                stompService.messages.collect { messagePayload ->
-                    // 1. (DB 저장 로직)
-                    try {
-                        // 🔽 STOMP는 'ChatMessageDto' 형식을 사용한다고 가정
-                        val messageDto = gson.fromJson(messagePayload, ChatMessageDto::class.java)
-                        val entity = messageDto.toEntity()
+    /**
+     * [신설] STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
+     * MainViewModel이 이 함수를 호출할 것입니다.
+     */
+    override suspend fun cacheStompMessages() {
+        Log.d("ChatRepository", "🚀 Starting STOMP message caching...")
+        try {
+            // stompService.messages를 구독하여 DB에 저장
+            stompService.messages.collect { messagePayload ->
+                // 1. (DB 저장 로직)
+                try {
+                    // 🔽 STOMP는 'ChatMessageDto' 형식을 사용한다고 가정
+                    val messageDto = gson.fromJson(messagePayload, ChatMessageDto::class.java)
+                    val entity = messageDto.toEntity()
 
-                        chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
-                        Log.d("ChatRepository", "STOMP 메시지 DB 저장 성공")
+                    chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
+                    Log.d("ChatRepository", "STOMP 메시지 DB 저장 성공")
 
-                        // 🔽🔽🔽 [필수 추가] 채팅방 목록 테이블도 업데이트 🔽🔽🔽
-                        chatDao.updateChatRoomSummary(
-                            roomId = entity.roomId,
-                            lastMessage = entity.content,
-                            lastMessageTime = entity.sendTime // Entity의 원본 시간
-                        )
-                        Log.d("ChatRepository", "STOMP 채팅방 요약 DB 업데이트 성공")
-                    } catch (e: Exception) {
-                        Log.e("ChatRepository", "STOMP 메시지 파싱 또는 DB 저장 실패", e)
-                    }
-
-                    // 2. (기존 로직) 원본 String을 ViewModel로 전달
-                    emit(messagePayload)
+                    // 🔽🔽🔽 [필수 추가] 채팅방 목록 테이블도 업데이트 🔽🔽🔽
+                    chatDao.updateChatRoomSummary(
+                        roomId = entity.roomId,
+                        lastMessage = entity.content,
+                        lastMessageTime = entity.sendTime // Entity의 원본 시간
+                    )
+                    Log.d("ChatRepository", "STOMP 채팅방 요약 DB 업데이트 성공")
+                } catch (e: Exception) {
+                    Log.e("ChatRepository", "STOMP 메시지 파싱 또는 DB 저장 실패", e)
                 }
-            } catch (e: CancellationException) {
-                Log.d("ChatRepository", "STOMP observe가 취소되었습니다.")
-                throw e
             }
+        } catch (e: CancellationException) {
+            Log.d("ChatRepository", "STOMP caching이 취소되었습니다.")
+            throw e
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "STOMP caching collect 실패", e)
         }
     }
 
@@ -272,11 +278,19 @@ class ChatRepositoryImpl @Inject constructor(
     /**
      * [신규] ViewModel이 특정 채팅방을 Room에서 '읽음' 처리합니다.
      * (ChatDao에 @Query("UPDATE chatroom_table SET unreadCount = 0 WHERE chatroomId = :chatId") fun markRoomAsRead(chatId: Long) 추가 필요)
+     *
+     * [수정됨] 채팅방 목록(unreadCount)과 개별 메시지(isRead)를 모두 '읽음' 처리합니다.
      */
     override suspend fun markRoomAsReadInDb(chatId: Long) {
         try {
+            // 1. [복원] 채팅방 목록(chat_rooms)의 unreadCount를 0으로 설정
             chatDao.markRoomAsRead(chatId) // (DAO에 @Query 함수 필요)
             Log.d("ChatRepository", "✅ Room DB unread count for $chatId set to 0")
+
+            // 2. [기존] 해당 채팅방의 모든 메시지(chat_messages)를 '읽음' 처리
+            chatDao.markMessagesAsReadInDb(chatId)
+            Log.d("ChatRepository", "✅ Room DB messages for $chatId marked as read")
+
         } catch (e: Exception) {
             Log.e("ChatRepository", "markRoomAsReadInDb DB 업데이트 실패", e)
         }

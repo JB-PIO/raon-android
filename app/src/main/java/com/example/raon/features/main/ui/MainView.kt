@@ -35,6 +35,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect // 🔽🔽🔽 [필수 Import]
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,11 +45,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner // 🔽🔽🔽 [필수 Import]
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle // 🔽🔽🔽 [필수 Import]
+import androidx.lifecycle.LifecycleEventObserver // 🔽🔽🔽 [필수 Import]
+import androidx.lifecycle.LifecycleOwner // 🔽🔽🔽 [필수 Import]
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -78,7 +83,35 @@ fun MainView(
     mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel
 ) {
 
-    //
+    // 🔽🔽🔽 [필수 추가] 생명주기 감지 및 STOMP 연결/해제 🔽🔽🔽
+    val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                // 앱이 화면에 다시 보일 때 (홈 화면에서 복귀 등)
+                Lifecycle.Event.ON_RESUME -> {
+                    mainViewModel.connectToStomp()
+                }
+                // 앱이 배경으로 사라질 때 (홈 화면 누름 등)
+                Lifecycle.Event.ON_PAUSE -> {
+                    mainViewModel.disconnectFromStomp()
+                }
+
+                else -> {} // ON_CREATE, ON_START, ON_STOP, ON_DESTROY 등
+            }
+        }
+
+        // 옵저버 추가
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // Composable이 화면에서 사라질 때 옵저버 제거
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    // 🔼🔼🔼 여기까지 추가 🔼🔼🔼
+
 
     // ------------------ [이 부분 추가] ------------------
     // MainView가 Composable 트리에 들어오는 순간 권한 요청 로직 실행

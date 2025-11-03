@@ -54,4 +54,14 @@ interface ChatDao {
      */
     @Query("UPDATE chat_rooms SET unreadCount = 0 WHERE chatroomId = :chatId")
     suspend fun markRoomAsRead(chatId: Long)
+
+
+    // ▼▼▼ [신규 추가] ▼▼▼
+    /**
+     * [신설] 특정 채팅방의 모든 메시지(chat_messages)를 '읽음'으로 설정합니다.
+     * (ChatMessageEntity의 isRead가 Boolean이므로 1을 사용)
+     */
+    @Query("UPDATE chat_messages SET isRead = 1 WHERE roomId = :chatId")
+    suspend fun markMessagesAsReadInDb(chatId: Long)
+    // ▲▲▲ [신규 추가] ▲▲▲
 }
