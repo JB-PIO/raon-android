@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.items // 👈 [수정] `items`로 변경
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,6 +56,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf // 👈 [ 1. import 추가 ]
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,11 +94,40 @@ fun ChatRoomScreen(
     val scope = rememberCoroutineScope()
     val analysisSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    LaunchedEffect(uiState.messages) {
-        if (uiState.messages.isNotEmpty()) {
+    // ▼▼▼ [ 2. 스크롤 로직 수정 ] ▼▼▼
+    // 새 메시지(가장 최신)가 추가될 때만 맨 아래로 스크롤합니다.
+    // (페이지 로드 시(맨 위에 추가)에는 스크롤 방지)
+    LaunchedEffect(uiState.messages.lastOrNull()) {
+        // 메시지 목록이 비어있지 않고, 초기 로딩이 아닐 때 (즉, 새 메시지 수신 시)
+        if (uiState.messages.isNotEmpty() && !uiState.isLoading) {
             listState.animateScrollToItem(0)
         }
     }
+    // ▲▲▲ [ 2. 스크롤 로직 수정 완료 ] ▲▲▲
+
+
+    // ▼▼▼ [ 3. Paging 트리거 추가 ] ▼▼▼
+    // 스크롤이 리스트의 마지막 아이템(가장 오래된 메시지)에 도달했는지 확인
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            if (lastVisibleItem == null) {
+                false
+            } else {
+                // 마지막으로 보이는 아이템의 인덱스가 (전체 아이템 개수 - 1)과 같으면,
+                // 즉, 스크롤이 끝(채팅 상단)에 도달하면
+                lastVisibleItem.index == listState.layoutInfo.totalItemsCount - 1
+            }
+        }
+    }
+
+    // shouldLoadMore가 true로 바뀌고, 로딩 중이 아닐 때 다음 페이지 로드
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && !uiState.isPageLoading && !uiState.isLastPage && !uiState.isLoading) {
+            viewModel.loadMoreMessages()
+        }
+    }
+    // ▲▲▲ [ 3. Paging 트리거 추가 완료 ] ▲▲▲
 
     if (uiState.imageAnalysisResult != null) {
         ModalBottomSheet(
@@ -186,9 +216,34 @@ fun ChatRoomScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                 ) {
 
-                    items(uiState.messages.reversed()) { message ->
+                    // ▼▼▼ [ 4. LazyColumn 컨텐츠 수정 (페이징 UI 추가) ] ▼▼▼
+
+                    // 1. 메시지 목록 (reversed() 사용 유지)
+                    items(
+                        items = uiState.messages.reversed(),
+                        key = { it.messageId } // 👈 성능 향상을 위해 key 추가
+                    ) { message ->
                         MessageBubble(message = message)
                     }
+
+                    // 2. 페이지 로딩 스피너 (reverseLayout=true이므로 리스트의 '끝'에 추가)
+                    // 마지막 페이지가 아닐 때만 스피너 공간을 만듭니다.
+                    if (!uiState.isLastPage) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // isPageLoading이 true일 때만 스피너를 표시
+                                if (uiState.isPageLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                            }
+                        }
+                    }
+                    // ▲▲▲ [ 4. LazyColumn 컨텐츠 수정 완료 ] ▲▲▲
                 }
 
                 // ▼▼▼ [수정된 부분] 경고 배너 표시 조건 및 호출 파라미터 변경 ▼▼▼

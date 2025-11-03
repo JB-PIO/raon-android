@@ -253,7 +253,12 @@ fun ItemDetailScreen(
                 ) { Text("삭제", color = BrandDarkText) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("취소") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(
+                        "취소",
+                        color = BrandDarkText
+                    )
+                }
             }
         )
     }

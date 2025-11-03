@@ -11,7 +11,7 @@ import com.example.raon.core.common.toKSTLocalDateTime
 import com.example.raon.core.common.toRelativeTimeString
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.repository.ImageStorageRepository
-import com.example.raon.features.chat.data.local.ChatRoomEntity // 🔽🔽🔽 [추가] ChatRoomEntity 임포트
+import com.example.raon.features.chat.data.local.ChatRoomEntity
 import com.example.raon.features.chat.data.remote.StompService
 import com.example.raon.features.chat.data.remote.dto.ChatMessageDto
 import com.example.raon.features.chat.data.remote.dto.UserInChatDetailDto
@@ -65,7 +65,7 @@ data class ChatProductInfo(
     val viewableThumbnailUrl: String?
 )
 
-// 채팅 화면 전체 UI 상태 (fraudWarningMessage -> fraudDetectionResult로 변경)
+// ▼▼▼ [ 1. ChatUiState 수정 (페이징 상태 추가) ] ▼▼▼
 data class ChatUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
@@ -78,8 +78,13 @@ data class ChatUiState(
 
     val isAnalyzingImage: Boolean = false,
     val imageAnalysisResult: List<ImageAnalysisResult>? = null,
-    val isDetectingFraud: Boolean = false
+    val isDetectingFraud: Boolean = false,
+
+    // --- Paging 상태 추가 ---
+    val isPageLoading: Boolean = false, // 👈 페이지 로드 중 스피너
+    val isLastPage: Boolean = false     // 👈 마지막 페이지 여부
 )
+// ▲▲▲ [ 1. ChatUiState 수정 완료 ] ▲▲▲
 
 // ==============================================================================================
 //  [ViewModel]
@@ -107,11 +112,16 @@ class ChatRoomViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
-    // ▼▼▼ [ 1. (수정 1단계) 이 두 줄을 추가 ] ▼▼▼
+    // ▼▼▼ [ 2. (수정 1단계) 이 두 줄을 추가 ] ▼▼▼
     // ChatRoomEntity 생성을 위해 판매자와 구매자 정보를 저장할 변수
     private var _sellerInfo: UserInChatDetailDto? = null
     private var _buyerInfo: UserInChatDetailDto? = null
-    // ▲▲▲ [ 1. 추가 완료 ] ▲▲▲
+    // ▲▲▲ [ 2. 추가 완료 ] ▲▲▲
+
+    // ▼▼▼ [ 3. ViewModel에 Paging 변수 추가 ] ▼▼▼
+    private var currentPage = 0
+    private val CHAT_PAGE_SIZE = 20 // 👈 페이지당 메시지 수 (서버와 동일하게)
+    // ▲▲▲ [ 3. Paging 변수 추가 완료 ] ▲▲▲
 
     init {
         Log.d("ChatViewModel", "0. Initializing with chatId: $chatRoomId")
@@ -156,11 +166,11 @@ class ChatRoomViewModel @Inject constructor(
                         is ApiResult.Exception -> throw detailsResult.e
                     }
 
-                // ▼▼▼ [ 2. (수정 2단계) 이 두 줄을 추가 ] ▼▼▼
+                // ▼▼▼ [ 4. (수정 2단계) 이 두 줄을 추가 ] ▼▼▼
                 // 1단계에서 추가한 변수에 API 응답 데이터 저장
                 _sellerInfo = chatDetailsData.seller
                 _buyerInfo = chatDetailsData.buyer
-                // ▲▲▲ [ 2. 추가 완료 ] ▲▲▲
+                // ▲▲▲ [ 4. 추가 완료 ] ▲▲▲
 
                 val opponentUser: UserInChatDetailDto
                 val isBuyer: Boolean
@@ -200,13 +210,13 @@ class ChatRoomViewModel @Inject constructor(
                     )
                 }
 
-                val messagesDeferred = async { loadInitialMessages() }
+                val messagesDeferred = async { loadInitialMessages() } // 👈 [ 5. 수정 ]
                 val loadedProductInfo = productInfoDeferred.await()
                 messagesDeferred.await()
 
                 _uiState.update {
                     it.copy(
-                        isLoading = false,
+                        // isLoading = false, 👈 [ 5. 수정 ] loadInitialMessages로 이동
                         productInfo = loadedProductInfo,
                         opponentNickname = actualOpponentNickname,
                         isCurrentUserBuyer = isBuyer
@@ -273,7 +283,15 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
+    // ▼▼▼ [ 6. loadInitialMessages 수정 (페이징 로직 추가) ] ▼▼▼
+    /**
+     * 첫 페이지(page = 0) 메시지를 로드합니다.
+     */
     private suspend fun loadInitialMessages() {
+        // 페이지 상태 초기화
+        currentPage = 0
+        _uiState.update { it.copy(isLastPage = false) }
+
         when (val result = chatRepository.getMessageList(chatRoomId, page = 0)) {
             is ApiResult.Success -> {
                 val messageDtos = result.data.data?.messages ?: emptyList()
@@ -287,21 +305,78 @@ class ChatRoomViewModel @Inject constructor(
                             msg.originalTimestamp.toInstant()
                         }.thenBy { it.messageId })
 
-                    currentState.copy(messages = updatedMessages)
+                    currentState.copy(
+                        messages = updatedMessages,
+                        isLoading = false, // 👈 로딩 상태 여기서 종료
+                        isLastPage = messageDtos.size < CHAT_PAGE_SIZE // 👈 마지막 페이지인지 확인
+                    )
                 }
             }
 
             is ApiResult.Error -> {
                 Log.e("ChatViewModel", "❌ Error loading initial messages: ${result.code}")
-                _uiState.update { it.copy(errorMessage = "메시지 로딩 실패") }
+                _uiState.update { it.copy(isLoading = false, errorMessage = "메시지 로딩 실패") }
             }
 
             is ApiResult.Exception -> {
                 Log.e("ChatViewModel", "❌ Exception loading initial messages", result.e)
-                _uiState.update { it.copy(errorMessage = "메시지 로딩 중 오류 발생") }
+                _uiState.update { it.copy(isLoading = false, errorMessage = "메시지 로딩 중 오류 발생") }
             }
         }
     }
+    // ▲▲▲ [ 6. 수정 완료 ] ▲▲▲
+
+    // ▼▼▼ [ 7. loadMoreMessages 함수 신규 추가 ] ▼▼▼
+    /**
+     * 다음 페이지 메시지를 로드합니다 (스크롤 시).
+     */
+    fun loadMoreMessages() {
+        // 이미 로딩 중이거나 마지막 페이지면 중단
+        if (_uiState.value.isPageLoading || _uiState.value.isLastPage) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPageLoading = true) }
+            currentPage++ // 다음 페이지
+            Log.d("ChatPaging", "Loading page: $currentPage")
+
+            when (val result = chatRepository.getMessageList(chatRoomId, page = currentPage)) {
+                is ApiResult.Success -> {
+                    val messageDtos = result.data.data?.messages ?: emptyList()
+                    _uiState.update { currentState ->
+                        val newMessages = messageDtos.map { dto ->
+                            dto.toDomainModel(myUserId.value)
+                        }
+
+                        // [중요] 새 메시지(과거)를 기존 메시지 *앞에* 추가
+                        val updatedMessages = (newMessages + currentState.messages)
+                            .distinctBy { it.messageId }
+                            .sortedWith(compareBy<ChatMessage> { msg ->
+                                msg.originalTimestamp.toInstant()
+                            }.thenBy { it.messageId })
+
+                        currentState.copy(
+                            messages = updatedMessages,
+                            isPageLoading = false,
+                            isLastPage = messageDtos.size < CHAT_PAGE_SIZE // 👈 마지막 페이지 확인
+                        )
+                    }
+                }
+
+                is ApiResult.Error -> {
+                    Log.e("ChatPaging", "❌ Error loading page $currentPage: ${result.code}")
+                    _uiState.update { it.copy(isPageLoading = false) }
+                    currentPage-- // 실패 시 페이지 원복
+                }
+
+                is ApiResult.Exception -> {
+                    Log.e("ChatPaging", "❌ Exception loading page $currentPage", result.e)
+                    _uiState.update { it.copy(isPageLoading = false) }
+                    currentPage-- // 실패 시 페이지 원복
+                }
+            }
+        }
+    }
+    // ▲▲▲ [ 7. 신규 추가 완료 ] ▲▲▲
 
     fun sendMessage(text: String) {
         // [참고] 현재 로직은 chatRoomId가 -1L(새 채팅)이면
