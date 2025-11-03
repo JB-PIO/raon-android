@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+// ▼▼▼ [수정 1] imePadding import 추가 ▼▼▼
+import androidx.compose.foundation.layout.imePadding
+// ▲▲▲ [수정 완료] ▲▲▲
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -467,7 +470,11 @@ fun MessageInput(
     var text by remember { mutableStateOf("") }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        // ▼▼▼ [수정 2] Surface의 modifier에 .imePadding() 추가 ▼▼▼
+        modifier = Modifier
+            .fillMaxWidth()
+            .imePadding(),
+        // ▲▲▲ [수정 완료] ▲▲▲
         shadowElevation = 0.dp,
         color = Color.White
     ) {

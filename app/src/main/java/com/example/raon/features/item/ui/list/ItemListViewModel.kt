@@ -9,7 +9,7 @@ import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest // 👈 'first' 대신 'collectLatest' import
+import kotlinx.coroutines.flow.collectLatest // 'first' 대신 'collectLatest' import
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,7 +34,7 @@ data class ItemListUiState(
     val locationName: String = "위치 정보 없음", // 현재 위치 이름 (UI 표시용)
     val availableLocations: List<LocationUiModel> = emptyList(), // 드롭다운 목록
 
-    // 👇 [수정 1] 다음 페이지가 있는지 여부를 나타내는 플래그 추가 (기본값 true)
+    // [수정 1] 다음 페이지가 있는지 여부를 나타내는 플래그 추가 (기본값 true)
     val hasNextPage: Boolean = true
 )
 

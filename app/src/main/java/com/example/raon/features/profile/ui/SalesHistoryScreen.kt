@@ -1,5 +1,7 @@
 package com.example.raon.features.profile.ui
 
+// ▼▼▼ [1] 사용하지 않는 import 제거 ▼▼▼
+// import android.util.Log // 👈 제거
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -47,11 +49,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+// import com.example.raon.core.common.toInstant // 👈 제거
+// import com.example.raon.core.common.toKSTLocalDateTime // 👈 제거
+// import com.example.raon.core.common.toRelativeTimeString // 👈 제거
 import com.example.raon.core.ui.component.ItemListComponoents
 import com.example.raon.core.ui.model.ItemListUiModel
 import com.example.raon.ui.theme.BrandDarkText
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+
+// ▲▲▲ [1] import 제거 완료 ▲▲▲
 
 private val tabs = listOf("판매중", "예약중", "거래완료")
 private val statusValues = listOf("AVAILABLE", "RESERVED", "SOLD")
@@ -294,6 +301,10 @@ private fun SalesListContent(
     onItemClick: (Int) -> Unit,
     onSettingsClick: (itemId: Int) -> Unit
 ) {
+    // ▼▼▼ [2] 'formattedItems'를 만들던 'remember' 로직 전체 제거 ▼▼▼
+    // val formattedItems = remember(items) { ... } // 👈 이 블록 전체 제거
+    // ▲▲▲ [2] 제거 완료 ▲▲▲
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
@@ -303,12 +314,15 @@ private fun SalesListContent(
         } else if (items.isEmpty()) {
             Text(text = emptyMessage, modifier = Modifier.padding(top = 16.dp))
         } else {
+            // ▼▼▼ [3] 'items' 원본 리스트를 그대로 전달 ▼▼▼
             ItemListComponoents(
-                items = items,
+                // items = formattedItems, // 👈 수정 전
+                items = items, // 👈 수정 후 (원본)
                 onItemClick = onItemClick,
                 showSettingsIcon = true,
                 onSettingsClick = onSettingsClick
             )
+            // ▲▲▲ [3] 전달 완료 ▲▲▲
         }
     }
 }
@@ -331,3 +345,7 @@ private fun BottomSheetMenuItem(
         Text(text)
     }
 }
+
+// ▼▼▼ [4] 파일 하단의 'formatTimeAgo' 헬퍼 함수 전체 제거 ▼▼▼
+// private fun formatTimeAgo(dateTimeString: String): String { ... } // 👈 이 함수 전체 제거
+// ▲▲▲ [4] 제거 완료 ▲▲▲

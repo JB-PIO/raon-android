@@ -3,6 +3,11 @@ package com.example.raon.features.profile.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+// ▼▼▼ [1] TimeExtensions 및 Log 임포트 추가 ▼▼▼
+import com.example.raon.core.common.toInstant
+import com.example.raon.core.common.toKSTLocalDateTime
+import com.example.raon.core.common.toRelativeTimeString
+// ▲▲▲ [1] 임포트 완료 ▲▲▲
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.ui.model.ItemListUiModel
 import com.example.raon.features.item.data.repository.ItemRepository
@@ -52,7 +57,24 @@ class SalesHistoryViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             profileRepository.getMyProducts()
                 .onSuccess { myItems ->
-                    val groupedByStatus = myItems.groupBy { it.status }
+
+                    // ▼▼▼ [2] 시간 포맷팅 로직 (핵심) ▼▼▼
+                    // 원본 리스트(myItems)를 '방금 전'으로 가공합니다.
+                    val formattedItems = myItems.map { item ->
+                        try {
+                            // (가정: ItemListUiModel이 'createdAt' 필드를 가진 data class)
+                            item.copy(
+                                timeAgo = formatTimeAgo(item.timeAgo) // 👈 시간 필드명 확인 필요
+                            )
+                        } catch (e: Exception) {
+                            Log.w("SalesHistoryVM", "Item 시간 변환 실패 (원본 반환): ${e.message}")
+                            item // 예외 발생 시 원본 반환
+                        }
+                    }
+                    // ▲▲▲ [2] 로직 완료 ▲▲▲
+
+                    // ▼▼▼ [3] 'formattedItems'를 사용해 그룹화 ▼▼▼
+                    val groupedByStatus = formattedItems.groupBy { it.status }
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -126,4 +148,25 @@ class SalesHistoryViewModel @Inject constructor(
             }
         }
     }
+
+    // ▼▼▼ [4] 헬퍼 함수를 ViewModel 클래스 내부에 private fun으로 추가 ▼▼▼
+    /**
+     * 시간 문자열을 "방금 전", "N분 전" 등으로 변환합니다.
+     */
+    private fun formatTimeAgo(dateTimeString: String): String {
+        // 이미 "방금 전" 등으로 변환된 문자열이 다시 들어오는 경우를 방지
+        if (dateTimeString.endsWith(" 전") || dateTimeString == "어제") {
+            return dateTimeString
+        }
+
+        if (dateTimeString.isEmpty()) return ""
+        return try {
+            // 프로젝트의 검증된 시간 파서 (TimeExtensions.kt)를 사용
+            dateTimeString.toInstant()?.toKSTLocalDateTime()?.toRelativeTimeString() ?: ""
+        } catch (e: Exception) {
+            Log.e("TimeParser", "formatTimeAgo 파싱 실패: $dateTimeString", e)
+            "시간 정보 없음" // 파싱 실패 시 대체 텍스트
+        }
+    }
+    // ▲▲▲ [4] 헬퍼 함수 추가 완료 ▲▲▲
 }

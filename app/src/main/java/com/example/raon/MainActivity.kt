@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
 import com.example.raon.features.auth.ui.z_etc.KakaoAuthViewModel
 import com.example.raon.navigation.AppNavigation
 import com.kakao.sdk.common.KakaoSdk
@@ -27,6 +28,12 @@ class MainActivity : ComponentActivity() {
 
         // KakaoSdk 초기화
         KakaoSdk.init(this, BuildConfig.Kakao_native_App_Key)
+
+
+        // ▼▼▼ 이 코드를 추가하세요 ▼▼▼
+        // 앱이 시스템 창(상태바, 키보드 등)을 직접 처리하도록 설정합니다.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 
         // ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
