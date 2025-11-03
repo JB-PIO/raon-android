@@ -1,15 +1,19 @@
 package com.example.raon.features.chat.domain.repository
 
 //import com.example.raon.features.chat.data.remote.dto.ChatRoomListDTO
+// [신규] MainViewModel이 DTO를 전달하므로 Import 필요
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.dto.ApiResponse
 import com.example.raon.features.chat.data.remote.dto.ChatRoomDetailResponse
+import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
 import com.example.raon.features.chat.data.remote.dto.ChatRoomListDto
 import com.example.raon.features.chat.data.remote.dto.MessageListDto
 import com.example.raon.features.chat.data.remote.dto.SendMessageResponseDto
 import com.example.raon.features.chat.data.remote.dto.ai.FraudData
 import com.example.raon.features.chat.data.remote.dto.ai.FraudDetectionRequestDto
 import com.example.raon.features.chat.data.remote.dto.ai.ImageAnalysisResponseDto
+import com.example.raon.features.chat.domain.model.ChatMessage
+import com.example.raon.features.chat.domain.model.ChatRoom
 import kotlinx.coroutines.flow.Flow
 
 
@@ -39,7 +43,6 @@ interface ChatRepository {
     /**
      * STOMP 세션을 연결하고 특정 채팅방의 메시지를 구독합니다.
      * @param chatRoomId 구독할 채팅방 ID
-     * @param authToken 인증을 위한 Access Token
      */
     suspend fun connectStomp(chatRoomId: Long)
 
@@ -75,4 +78,28 @@ interface ChatRepository {
     // [ 메시지 읽음 처리 함수]
     suspend fun markMessagesAsRead(chatId: Long): ApiResult<ApiResponse<Unit>>
 
+
+    // 🔽🔽🔽 SSoT용 함수 2개 추가 (인터페이스 선언) 🔽🔽🔽
+    /**
+     * [신설] Room DB로부터 특정 채팅방의 메시지 목록을 Flow로 관찰합니다.
+     */
+    fun getMessagesFromDb(chatId: Long): Flow<List<ChatMessage>>
+
+    /**
+     * [신설] Room DB로부터 전체 채팅방 목록을 Flow로 관찰합니다.
+     */
+    fun getChatRoomsFromDb(): Flow<List<ChatRoom>> // <- 'ChatRoom' Import로 에러 해결
+
+
+    // ▼▼▼ [신규] MainViewModel이 호출할 SSoT 쓰기 함수 ▼▼▼
+
+    /**
+     * [신설] ViewModel에서 Presigned URL 처리가 완료된 목록을 Room에 저장(캐시)합니다.
+     */
+    suspend fun cacheChatRoomList(chatRooms: List<ChatRoomInfo>)
+
+    /**
+     * [신설] ViewModel이 특정 채팅방을 Room에서 '읽음' 처리합니다.
+     */
+    suspend fun markRoomAsReadInDb(chatId: Long)
 }

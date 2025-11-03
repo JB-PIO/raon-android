@@ -169,4 +169,7 @@ dependencies {
 
     // Moshi 라이브러리 추가
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+
+    // Accompanist Permissions (권한 관리를 위한 라이브러리)
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0") // 최신 버전 확인 필요
 }

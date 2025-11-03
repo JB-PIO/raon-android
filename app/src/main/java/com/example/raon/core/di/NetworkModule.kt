@@ -14,6 +14,7 @@ import com.example.raon.features.location.data.remote.api.LocationApiService
 import com.example.raon.features.profile.data.remote.ProfileApiService
 import com.example.raon.features.search.data.remote.api.SearchApiService
 import com.example.raon.features.user.data.remote.UserApiService
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -246,6 +247,13 @@ object NetworkModule {
     @Singleton
     fun provideProfileApiService(@Named("RaonRetrofit") retrofit: Retrofit): ProfileApiService {
         return retrofit.create(ProfileApiService::class.java)
+    }
+
+    // ▼▼▼ [신규] 이 함수를 추가해 주세요 ▼▼▼
+    @Provides
+    @Singleton
+    fun provideGson(): Gson {
+        return Gson()
     }
 
 }

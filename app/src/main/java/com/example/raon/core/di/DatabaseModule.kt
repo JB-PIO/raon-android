@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.raon.core.database.AppDatabase
 import com.example.raon.features.category.data.local.CategoryDao
+import com.example.raon.features.chat.data.local.ChatDao
 import com.example.raon.features.search.data.local.RecentSearchDao
 import dagger.Module
 import dagger.Provides
@@ -48,12 +49,11 @@ object DatabaseModule {
         return appDatabase.recentSearchDao()
     }
 
-    /*
-    // 만약 다른 Dao가 있다면 이런 식으로 추가하면 됩니다.
+
     @Provides
     @Singleton
-    fun provideUserDao(appDatabase: AppDatabase): UserDao {
-        return appDatabase.userDao()
+    fun provideChatDao(appDatabase: AppDatabase): ChatDao { // <--- 추가
+        return appDatabase.chatDao()
     }
-    */
+
 }

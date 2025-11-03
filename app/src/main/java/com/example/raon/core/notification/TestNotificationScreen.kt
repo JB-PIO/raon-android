@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 
 // 임시 ChatMessage 모델 (실제 사용 시 DTO 변환 필요)
 // 실제 ChatMessage 모델이 없다면 다음과 같이 정의되었다고 가정합니다.
-data class ChatMessage(
+data class TestChatMessage(
     val messageId: Long,
     val chatId: Long,
     val senderNickname: String,
@@ -46,7 +46,7 @@ fun TestNotificationScreen() {
 
         Button(onClick = {
             // 버튼 클릭 시 알림 띄우기 로직 실행
-            val testMessage = ChatMessage(
+            val testMessage = TestChatMessage(
                 messageId = System.currentTimeMillis(),
                 chatId = 12345L, // 알림 클릭 시 이동할 채팅방 ID
                 senderNickname = "라온",

@@ -13,6 +13,5 @@ data class ChatMessage(
     val timestamp: String,
     val isFromMe: Boolean,
     val originalTimestamp: String // 정렬 및 API 전송용 원본 시간 추가
-
-
+    
 )

@@ -32,7 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
-import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
+// [수정] DTO(ChatRoomInfo) 대신 Domain Model(ChatRoom)을 import 합니다.
+import com.example.raon.features.chat.domain.model.ChatRoom
 import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
 import java.time.OffsetDateTime
@@ -40,7 +41,7 @@ import java.time.temporal.ChronoUnit
 
 
 /**
- * TopAppBar: MainView에서 호출하여 사용합니다.
+ * TopAppBar: MainView에서 호출하여 사용합니다. (변경 없음)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +63,8 @@ fun ChatListTopAppBar(navController: NavController) {
 fun ChatListScreen(
     onChatRoomClick: (chatRoomId: Long, opponentId: Int, itemId: Long) -> Unit,
     myUserId: Int, // 👈 파라미터로 myUserId를 추가합니다.
-    chatRooms: List<ChatRoomInfo>
+    // [수정] DTO(ChatRoomInfo) 대신 Domain Model(ChatRoom)을 받습니다.
+    chatRooms: List<ChatRoom>
 ) {
 
 
@@ -71,31 +73,29 @@ fun ChatListScreen(
     ) {
         items(
             items = chatRooms,
-            key = { it.chatId } // 각 아이템의 고유 키는 chatId로 설정
-        ) { chatRoom ->
+            // [수정] chatRoom.chatId -> chatRoom.roomId (도메인 모델의 필드명 사용)
+            key = { it.roomId } // 각 아이템의 고유 키
+        ) { chatRoom -> // 'chatRoom'은 이제 List<ChatRoom>의 'ChatRoom' 타입입니다.
             ChatListItem(
                 chatRoom = chatRoom,
                 myUserId = myUserId,
                 onClick = {
-
-                    // 상대방 id 판별해서 담기
-                    val opponentId = if (myUserId == chatRoom.seller.userId) {
-                        chatRoom.buyer.userId // 내가 판매자면 상대방은 구매자 ID
+                    // [수정] Room에서 가져온 도메인 모델의 ID를 사용합니다.
+                    // (이 ID들이 ChatRoom 모델에 포함되어 있어야 합니다)
+                    val opponentId = if (myUserId == chatRoom.sellerId) {
+                        chatRoom.buyerId // 내가 판매자면 상대방은 구매자 ID
                     } else {
-                        chatRoom.seller.userId // 내가 구매자면 상대방은 판매자 ID
+                        chatRoom.sellerId // 내가 구매자면 상대방은 판매자 ID
                     }
 
                     // 채티방 터치 이벤트 발생시 실행하는 함수 -> chatroomId, sellerId 전달
                     onChatRoomClick(
-                        chatRoom.chatId,    // 채팅방 Id
-                        opponentId,         // 상대방 Id
-                        chatRoom.product.productId  // 채팅방 Item Id
+                        chatRoom.roomId,    // [수정] 채팅방 Id (Room)
+                        opponentId,         // [수정] 상대방 Id (Room)
+                        chatRoom.productId.toLong()  // [수정] 채팅방 Item Id (Room)
                     )
 
-                    // 아이템 클릭 시 해당 chatId를 가지고 채팅방 화면으로 이동
-//                    navController.navigate("chatRoom/${chatRoom.chatId}")
-
-                    Log.d("채팅프로세스1", "ChatListScreen ->  채팅방 ID: ${chatRoom.chatId}")
+                    Log.d("채팅프로세스1", "ChatListScreen ->  채팅방 ID: ${chatRoom.roomId}")
                 }
             )
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
@@ -105,18 +105,12 @@ fun ChatListScreen(
 
 @Composable
 private fun ChatListItem(
-    chatRoom: ChatRoomInfo,
+    // [수정] DTO(ChatRoomInfo) 대신 Domain Model(ChatRoom)을 받습니다.
+    chatRoom: ChatRoom,
     myUserId: Int,
     onClick: () -> Unit
 ) {
-    // '나'와 비교해서 opponent(=상대방) 데이터를 담아줌
-    val opponent = if (myUserId == chatRoom.seller.userId) {
-        chatRoom.buyer
-    } else {
-        chatRoom.seller
-    }
-
-
+    // [삭제] 'opponent' 객체 로직 (Domain Model에 이미 opponentName이 있음)
 
     Row(
         modifier = Modifier
@@ -126,13 +120,11 @@ private fun ChatListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 상대방 프로필 이미지 (또는 상품 썸네일)
-
-        Log.d("chatroomList", "url확인 : ${chatRoom.viewableThumbnailUrl}")
+        Log.d("chatroomList", "url확인 : ${chatRoom.opponentProfileUrl}")
 
         AsyncImage(
-//            model = chatRoom.buyer.profileImage ?: chatRoom.product.thumbnail,
-            model = chatRoom.viewableThumbnailUrl ?: chatRoom.product.thumbnail,
-
+            // [수정] Domain Model의 필드(opponentProfileUrl)를 사용합니다. (Room)
+            model = chatRoom.opponentProfileUrl,
             contentDescription = "채팅 상대 프로필 이미지",
             modifier = Modifier
                 .size(60.dp)
@@ -148,15 +140,24 @@ private fun ChatListItem(
             verticalArrangement = Arrangement.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // 'myUserId'를 사용해 상대방 닉네임을 결정합니다.
+                val opponentName = if (myUserId == chatRoom.sellerId) {
+                    chatRoom.buyerNickname
+                } else {
+                    chatRoom.sellerNickname
+                }
+
                 Text(
-                    text = opponent.nickname,
+                    // [수정] Domain Model의 필드(opponentName)를 사용합니다. (Room)
+                    text = opponentName,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = formatTimeAgo(chatRoom.lastMessage?.sentAt),
+                    // [수정] Domain Model의 필드(lastMessageTime)를 사용합니다. (Room)
+                    text = formatTimeAgo(chatRoom.lastMessageTime),
                     color = Color.Gray,
                     fontSize = 12.sp
                 )
@@ -166,7 +167,8 @@ private fun ChatListItem(
 
             // 마지막 채팅 내용
             Text(
-                text = chatRoom.lastMessage?.content ?: "대화 내용이 없습니다.",
+                // [수정] Domain Model의 필드(lastMessage)를 사용합니다. (Room)
+                text = chatRoom.lastMessage.ifEmpty { "대화 내용이 없습니다." },
                 color = Color.Gray,
                 fontSize = 14.sp,
                 maxLines = 1,
@@ -175,6 +177,7 @@ private fun ChatListItem(
         }
 
         // 안 읽은 메시지 개수 (있을 경우에만 표시)
+        // [수정] Domain Model의 필드(unreadCount)를 사용합니다. (Room)
         if (chatRoom.unreadCount > 0) {
             Spacer(modifier = Modifier.width(16.dp))
             Text(
@@ -192,8 +195,9 @@ private fun ChatListItem(
 
 // 시간 포맷팅을 위한 헬퍼 함수
 @Composable
-private fun formatTimeAgo(dateTimeString: String?): String {
-    if (dateTimeString == null) return ""
+// [수정] Domain Model의 lastMessageTime은 null이 아니므로 String을 받습니다.
+private fun formatTimeAgo(dateTimeString: String): String {
+    if (dateTimeString.isEmpty()) return ""
     return try {
         // Z(UTC) 정보가 없는 시간이므로 "T"를 추가하고 임의의 Z를 붙여 OffsetDateTime으로 파싱
         val createdTime = OffsetDateTime.parse(dateTimeString.replace(" ", "T") + "Z")
@@ -211,6 +215,7 @@ private fun formatTimeAgo(dateTimeString: String?): String {
             else -> "${createdTime.monthValue}월 ${createdTime.dayOfMonth}일"
         }
     } catch (e: Exception) {
+        Log.e("ChatListScreen", "formatTimeAgo 파싱 실패: $dateTimeString", e)
         "시간 정보 없음"
     }
 }

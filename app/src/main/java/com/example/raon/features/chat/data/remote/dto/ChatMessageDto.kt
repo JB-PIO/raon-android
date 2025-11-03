@@ -14,7 +14,7 @@ data class ChatMessageDto(
     val messageId: Long,
     val chatId: Long, // API 명세에 따라 chatRoomId -> chatId 로 변경될 수 있음
     val sender: SenderDto,
-    val content: String?,
+    val content: String,
     val imageUrl: String?,
     val isRead: Boolean,
     val isDeleted: Boolean,

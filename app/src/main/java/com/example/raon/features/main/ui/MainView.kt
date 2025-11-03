@@ -1,5 +1,7 @@
 package com.example.raon.features.main.ui
 
+import android.Manifest
+import android.os.Build
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -15,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding // 👈 [추가]
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -33,6 +35,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +66,9 @@ import com.example.raon.features.user.ui.ProfileTopAppBar
 import com.example.raon.navigation.NavItem
 import com.example.raon.ui.theme.BrandDarkText
 import com.example.raon.ui.theme.BrandYellow
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +77,14 @@ fun MainView(
     navController: NavController,
     mainViewModel: MainViewModel = hiltViewModel()  // MainViewModel
 ) {
+
+    //
+
+    // ------------------ [이 부분 추가] ------------------
+    // MainView가 Composable 트리에 들어오는 순간 권한 요청 로직 실행
+    RequestNotificationPermission()
+    // ---------------------------------------------------
+
 
     // [수정] ViewModel에서 실제 데이터 가져오기
     val userProfile by mainViewModel.userProfile.collectAsStateWithLifecycle()
@@ -353,4 +367,30 @@ fun LocationMenuItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     )
+}
+
+
+// 알림 권한 물어보기 UI
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun RequestNotificationPermission() {
+    // Android 13 (API 33) 이상에서만 POST_NOTIFICATIONS 권한 필요
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+        // 1. 권한 상태를 관리하는 객체를 가져옵니다. (주석 해제)
+        val notificationPermissionState = rememberPermissionState(
+            permission = Manifest.permission.POST_NOTIFICATIONS
+        )
+
+        // 2. MainView가 로드될 때 (단 한 번) 실행합니다. (주석 해제)
+        LaunchedEffect(Unit) {
+            when {
+                // 권한이 부여되지 않은 상태에서만 요청
+                !notificationPermissionState.status.isGranted -> {
+                    // 권한 요청 다이얼로그를 띄웁니다.
+                    notificationPermissionState.launchPermissionRequest()
+                }
+            }
+        }
+    }
 }
