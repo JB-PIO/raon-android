@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.raon.core.common.AppConstants
+import com.example.raon.core.common.CurrentScreenManager
 import com.example.raon.core.common.toInstant
 import com.example.raon.core.common.toKSTLocalDateTime
 import com.example.raon.core.common.toRelativeTimeString
@@ -33,7 +34,7 @@ import java.time.Instant
 import javax.inject.Inject
 
 // ==============================================================================================
-// 🎨 [Domain Model] AI 이미지 분석 결과를 UI에 전달하기 위한 데이터 클래스
+// [Domain Model] AI 이미지 분석 결과를 UI에 전달하기 위한 데이터 클래스
 // ==============================================================================================
 data class ImageAnalysisResult(
     val imageUrl: String,
@@ -42,7 +43,7 @@ data class ImageAnalysisResult(
 )
 
 // ==============================================================================================
-// 🚨 [Domain Model] AI 사기 탐지 결과를 UI에 전달하기 위한 데이터 클래스 (새로 추가됨)
+// [Domain Model] AI 사기 탐지 결과를 UI에 전달하기 위한 데이터 클래스
 // ==============================================================================================
 data class FraudDetectionResult(
     val level: String, // "SAFE", "WARNING", "DANGER"
@@ -50,7 +51,7 @@ data class FraudDetectionResult(
 )
 
 // ==============================================================================================
-// 📦 [UI State]
+// [UI State]
 // ==============================================================================================
 
 // 화면 상단 바 상품 정보 data class
@@ -80,7 +81,7 @@ data class ChatUiState(
 )
 
 // ==============================================================================================
-// 🚀 [ViewModel]
+//  [ViewModel]
 // ==============================================================================================
 
 @HiltViewModel
@@ -89,8 +90,11 @@ class ChatRoomViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val imageStorageRepository: ImageStorageRepository,
     private val stompService: StompService,
-    savedStateHandle: SavedStateHandle
-) : ViewModel() {
+    private val currentScreenManager: CurrentScreenManager,
+
+    savedStateHandle: SavedStateHandle,
+
+    ) : ViewModel() {
 
     val chatRoomId: Long = savedStateHandle.get<String>("chatRoomId")?.toLongOrNull() ?: -1L
 
@@ -101,6 +105,14 @@ class ChatRoomViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     init {
+
+
+        Log.d("ChatViewModel", "0. Initializing with chatId: $chatRoomId")
+
+        // ViewModel 생성 시 (채팅방 진입) 현재 방 ID 설정
+        currentScreenManager.setCurrentChatRoom(chatRoomId)
+
+
         Log.d("ChatViewModel", "0. Initializing with chatId: $chatRoomId")
         viewModelScope.launch {
             _myUserId.value = userRepository.getUserProfile().first()?.userId
@@ -108,7 +120,8 @@ class ChatRoomViewModel @Inject constructor(
 
             if (chatRoomId != -1L && _myUserId.value != null) {
                 loadInitialData()
-                connectAndObserveStomp()
+                // [수정됨] 함수 이름 변경 및 연결 로직 제거
+                observeStompMessages()
             } else {
                 val errorMsg =
                     if (chatRoomId == -1L) "Invalid chat room ID." else "Could not load user info."
@@ -194,10 +207,14 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
-    private fun connectAndObserveStomp() {
+    // [수정됨] 함수 이름 변경 및 connectStomp 제거
+    private fun observeStompMessages() {
         viewModelScope.launch {
             try {
-                chatRepository.connectStomp(chatRoomId = chatRoomId)
+                // [수정됨] ⛔ 연결(connect) 로직 제거 ⛔
+                // chatRepository.connectStomp(chatRoomId = chatRoomId)
+
+                // 구독(observe)만 수행
                 chatRepository.observeMessages(chatRoomId)
                     .catch { e ->
                         Log.e("ChatViewModel", "❌ STOMP message observation error", e)
@@ -207,6 +224,10 @@ class ChatRoomViewModel @Inject constructor(
                         try {
                             val chatMessageDto =
                                 gson.fromJson(jsonString, ChatMessageDto::class.java)
+
+                            // [수정됨] 이 채팅방의 메시지인지 필터링
+                            if (chatMessageDto.chatId != chatRoomId) return@collect
+
                             val chatMessage = chatMessageDto.toDomainModel(myUserId.value)
 
                             if (!chatMessage.isFromMe) {
@@ -230,8 +251,8 @@ class ChatRoomViewModel @Inject constructor(
                         }
                     }
             } catch (e: Exception) {
-                Log.e("ChatViewModel", "❌ STOMP connection failed", e)
-                _uiState.update { it.copy(errorMessage = "실시간 채팅 서버 연결 실패") }
+                Log.e("ChatViewModel", "❌ STOMP observation failed", e)
+                _uiState.update { it.copy(errorMessage = "실시간 채팅 수신 실패") }
             }
         }
     }
@@ -456,11 +477,13 @@ class ChatRoomViewModel @Inject constructor(
         }
     }
 
+    // [수정됨] ⛔ STOMP 연결 해제(disconnect) 로직 제거 ⛔
     override fun onCleared() {
+        currentScreenManager.clearCurrentChatRoom() // 채팅방 나가면 currentScreen 화면 초기
         super.onCleared()
-        viewModelScope.launch {
-            Log.d("ChatViewModel", "onCleared: Disconnecting STOMP...")
-            chatRepository.disconnectStomp()
-        }
+        // viewModelScope.launch {
+        //     Log.d("ChatViewModel", "onCleared: Disconnecting STOMP...")
+        //     chatRepository.disconnectStomp() // <- 제거
+        // }
     }
 }

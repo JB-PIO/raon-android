@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.raon.core.notification.TestNotificationScreen
 import com.example.raon.features.category.ui.CategoryScreen
 import com.example.raon.features.category.ui.CategoryViewModel
 import com.example.raon.features.chat.ui.ChatRoomScreen
@@ -47,6 +48,8 @@ fun AppNavigation(
 
         composable("testUI") {
 //            LocationSelectorScreen()
+
+            TestNotificationScreen()
         }
 
 

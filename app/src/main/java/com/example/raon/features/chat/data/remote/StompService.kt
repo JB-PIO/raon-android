@@ -68,7 +68,7 @@ class StompService @Inject constructor(
             // ▼▼▼ passcode 방식 유지 ▼▼▼
             session = stompClient.connect(
                 url = webSocketUrl,
-                passcode = authToken // 👈 요청하신대로 passcode 사용
+                passcode = authToken // 요청하신대로 passcode 사용
             )
             // ▲▲▲ 여기까지 ▲▲▲
 
@@ -93,21 +93,21 @@ class StompService @Inject constructor(
                         }
                         ?.catch { e ->
                             Log.e("StompService", "!!! Error in message receiving flow", e)
-                            disconnect() // 👈 에러 시 세션 정리 (null로 만듦)
+                            disconnect() // 에러 시 세션 정리 (null로 만듦)
                         }
                         ?.collect {
                             // No action needed here
                         }
                 } catch (e: CancellationException) {
                     Log.d("StompService", "Subscription scope cancelled. Disconnecting session.")
-                    disconnect() // 👈 코루틴 취소 시 세션 정리
+                    disconnect() // 코루틴 취소 시 세션 정리
                 } catch (e: Exception) {
                     Log.e(
                         "StompService",
                         "!!! Unhandled exception in subscription setup or flow",
                         e
                     )
-                    disconnect() // 👈 예상 못한 에러 시 세션 정리
+                    disconnect() // 예상 못한 에러 시 세션 정리
                 } finally {
                     Log.d("StompService", "Subscription flow ended.")
                     // Flow 종료 시 disconnect 호출은 주석 처리
@@ -117,7 +117,7 @@ class StompService @Inject constructor(
         } catch (e: Exception) {
             // stompClient.connect 자체가 실패한 경우
             Log.e("StompService", "!!! STOMP connection failed", e)
-            disconnect() // 👈 연결 실패 시에도 세션 정리 (null로 만듦)
+            disconnect() // 연결 실패 시에도 세션 정리 (null로 만듦)
         }
     }
 
@@ -131,7 +131,7 @@ class StompService @Inject constructor(
             if (session != null) {
                 Log.d("StompService", "Setting session variable to null.")
             }
-            session = null // 👈 항상 null로 설정하여 정리
+            session = null // 항상 null로 설정하여 정리
         }
     }
 }

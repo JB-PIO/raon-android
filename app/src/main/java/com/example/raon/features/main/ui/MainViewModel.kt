@@ -5,13 +5,20 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.raon.core.common.AppConstants
+import com.example.raon.core.common.CurrentScreenManager
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.repository.ImageStorageRepository
+import com.example.raon.core.notification.ChatNotificationHelper
+// [수정됨] 1. 불필요한 주석 제거
+// import com.example.raon.core.service.NotificationService
+import com.example.raon.features.chat.data.remote.StompService
+import com.example.raon.features.chat.data.remote.dto.ChatMessageDto
 import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
 import com.example.raon.features.chat.domain.repository.ChatRepository
 import com.example.raon.features.item.ui.list.LocationUiModel
 import com.example.raon.features.user.domain.model.User
 import com.example.raon.features.user.domain.repository.UserRepository
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -19,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -45,11 +53,19 @@ class MainViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val userRepository: UserRepository,
     private val savedStateHandle: SavedStateHandle,
-    private val imageStorageRepository: ImageStorageRepository// S3에 업로드 하는 Repository
+    private val imageStorageRepository: ImageStorageRepository, // S3에 업로드 하는 Repository
+    private val stompService: StompService,
+    private val currentScreenManager: CurrentScreenManager,
+    private val chatNotificationHelper: ChatNotificationHelper // 주입 확인
+    // [수정됨] 2. 불필요한 주석 제거
+    // private val notificationService: NotificationService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
+
+    // (선택 사항) StompService가 String을 반환하므로 파싱을 위해 Gson 인스턴스 추가
+    private val gson = Gson()
 
     val userProfile: StateFlow<User?> = userRepository.getUserProfile()
         .onEach { user -> // <-- 이 부분을 추가하세요!
@@ -83,6 +99,18 @@ class MainViewModel @Inject constructor(
 
 
     init {
+        // 1. MainViewModel 시작 시 STOMP 연결
+        viewModelScope.launch {
+            Log.d("MainViewModel", "🚀 Initializing STOMP connection...")
+            // chatRoomId는 StompService에서 사용하지 않으므로 0L 전달
+            chatRepository.connectStomp(0L)
+            Log.d("MainViewModel", "✅ STOMP connection attempt initiated.")
+        }
+
+        // 2. 알림 및 채팅 목록 업데이트를 위해 메시지 구독
+        observeGlobalMessages()
+
+        // 3. 기존 데이터 로드
         loadInitialData()
 
 
@@ -108,6 +136,96 @@ class MainViewModel @Inject constructor(
                 }
         }
     }
+
+    // [수정됨] 알림 분기 처리를 포함하도록 로직 수정
+// [수정됨] 디버그 로그를 추가하여 알림 분기 로직을 정밀하게 추적
+    private fun observeGlobalMessages() {
+        viewModelScope.launch {
+            chatRepository.observeMessages(0L) // 어차피 StompService.messages를 반환
+                .catch { e -> Log.e("MainViewModel", "❌ STOMP global observe error", e) }
+                .collect { messageJson ->
+                    try {
+                        val messageDto = gson.fromJson(messageJson, ChatMessageDto::class.java)
+
+                        // --- [핵심] 알림 분기 로직 ---
+
+                        // 1. 현재 상태 값 가져오기
+                        val currentChatId = currentScreenManager.currentChatRoomId.value
+                        val isAppInForeground = currentScreenManager.isAppInForeground.value
+
+                        // 2. [디버그 로그] 현재 상태를 정확히 로깅
+                        Log.d("NotificationDebug", "--- 새 메시지 수신 ---")
+                        Log.d("NotificationDebug", "앱 포그라운드 상태: $isAppInForeground")
+                        Log.d("NotificationDebug", "현재 보고있는 채팅방 ID: $currentChatId")
+                        Log.d("NotificationDebug", "수신된 메시지 채팅방 ID: ${messageDto.chatId}")
+
+                        if (isAppInForeground) {
+                            // --- 앱이 켜져있을 때 ---
+                            if (currentChatId == messageDto.chatId) {
+                                // [CASE 1: 채팅방 일치]
+                                Log.d("NotificationDebug", "판단: CASE 1 (현재 채팅방). 알림 없음.")
+                                // ChatRoomViewModel이 말풍선을 띄울 것이므로 아무것도 안 함
+                            } else {
+                                // [CASE 2: 채팅방 불일치]
+                                Log.d("NotificationDebug", "판단: CASE 2 (다른 화면). 헤드업 알림 시도.")
+
+                                // 실제 알림 호출
+                                chatNotificationHelper.showChatNotification(messageDto)
+
+                                // 채팅 목록 UI 업데이트
+                                updateChatListFromMessage(messageDto)
+                            }
+                        } else {
+                            // --- 앱이 백그라운드일 때 ---
+                            // [CASE 3: 백그라운드]
+                            Log.d("NotificationDebug", "판단: CASE 3 (백그라운드). 기본 알림 시도.")
+
+                            // 실제 알림 호출
+                            chatNotificationHelper.showChatNotification(messageDto)
+
+                            // 채팅 목록 UI 업데이트
+                            updateChatListFromMessage(messageDto)
+                        }
+                        // --- 분기 로직 끝 ---
+
+                    } catch (e: Exception) {
+                        Log.e("MainViewModel", "❌ Failed to parse global message", e)
+                    }
+                }
+        }
+    }
+
+    // 채팅 목록 UI 업데이트 로직을 별도 함수로 분리
+    private fun updateChatListFromMessage(messageDto: ChatMessageDto) {
+        _uiState.update { currentState ->
+            var totalUnreadCount = 0
+            val updatedRooms = currentState.chatRooms.map { room ->
+                // DTO의 chatRoomId와 리스트의 chatId를 비교
+                if (room.chatId == messageDto.chatId) { // [수정됨] chatRoomId 사용
+                    val newUnreadCount = (room.unreadCount) + 1
+                    totalUnreadCount += newUnreadCount
+                    room.copy(
+                        unreadCount = newUnreadCount,
+                        // (선택) 마지막 메시지 내용/시간도 업데이트하면 좋습니다.
+                        // lastMessageContent = messageDto.content,
+                        // lastMessageTimestamp = messageDto.sentAt
+                    )
+                } else {
+                    totalUnreadCount += room.unreadCount
+                    room
+                }
+            }
+
+            // 새 메시지를 받은 채팅방을 목록 맨 위로 올리는 정렬 로직
+            // val sortedRooms = updatedRooms.sortedByDescending { /* it.lastMessageTimestamp */ }
+
+            currentState.copy(
+                chatRooms = updatedRooms, // 또는 sortedRooms
+                unreadChatCount = totalUnreadCount
+            )
+        }
+    }
+
 
     private fun loadInitialData() {
         viewModelScope.launch {
@@ -178,7 +296,7 @@ class MainViewModel @Inject constructor(
 
                 //  [주석 5] 채팅 DTO 리스트를 UI 모델 리스트로 변환 (각 썸네일 Presigned URL 포함)
                 val chatListWithUrls: List<ChatRoomInfo> =
-                    chatList.map { chatRoomInfo -> // 반환 타입 명시                    // 각 채팅방 썸네일에 대해 Presigned URL 요청을 비동기로 시작
+                    chatList.map { chatRoomInfo -> // 반환 타입 명시                    // 각 채팅방 썸에일에 대해 Presigned URL 요청을 비동기로 시작
                         async {
                             // 썸네일 S3 키 파싱 (예: "items/image.jpg")
                             val thumbnailKey =
@@ -259,7 +377,7 @@ class MainViewModel @Inject constructor(
 
 
     // ---------------- [이 부분 수정] ----------------
-    // [추가] 드롭다운에서 새 위치(즐겨찾기 또는 현재위치)를 선택했을 때 호출
+    // 드롭다운에서 새 위치(즐겨찾기 또는 현재위치)를 선택했을 때 호출
     fun selectNewMainLocation(location: LocationUiModel) {
         // ❗️[로그 추가] 이 함수가 호출되는지 확인합니다.
         Log.d("LocationUpdate", "🚀 selectNewMainLocation 호출됨")
@@ -291,4 +409,13 @@ class MainViewModel @Inject constructor(
         }
     }
     // ---------------------------------------------------
+
+    // 4. MainViewModel 종료 시 STOMP 연결 해제 (로그아웃 시에도 호출 필요)
+    override fun onCleared() {
+        viewModelScope.launch {
+            Log.d("MainViewModel", "onCleared: Disconnecting STOMP...")
+            chatRepository.disconnectStomp()
+        }
+        super.onCleared()
+    }
 }

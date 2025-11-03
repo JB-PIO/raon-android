@@ -493,15 +493,15 @@ fun MessageInput(
                 maxLines = 4
             )
 
-            if (isBuyer) {
-                IconButton(onClick = { onAIDetectFraud() }) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "AI 분석",
-                        tint = Color.Gray
-                    )
-                }
+//            if (isBuyer) {
+            IconButton(onClick = { onAIDetectFraud() }) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = "AI 분석",
+                    tint = Color.Gray
+                )
             }
+//            }
 
             if (text.isBlank()) {
                 IconButton(onClick = { /* 이모티콘 창 열기 */ }) {
