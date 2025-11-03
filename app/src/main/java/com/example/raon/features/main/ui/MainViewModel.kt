@@ -1,5 +1,6 @@
 package com.example.raon.features.main.ui
 
+//import com.example.raon.core.service.ChatService // [추가] ChatService import
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -10,7 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.raon.core.common.AppConstants
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.repository.ImageStorageRepository
-//import com.example.raon.core.service.ChatService // [추가] ChatService import
+import com.example.raon.features.chat.data.remote.StompService
 import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
 import com.example.raon.features.chat.data.remote.service.ChatService
 import com.example.raon.features.chat.domain.model.ChatRoom
@@ -19,13 +20,14 @@ import com.example.raon.features.item.ui.list.LocationUiModel
 import com.example.raon.features.user.domain.model.User
 import com.example.raon.features.user.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext // [추가] Hilt Context import
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -46,12 +48,12 @@ data class MainUiState(
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    @ApplicationContext private val context: Context, // [추가] Hilt로 ApplicationContext 주입
+    @ApplicationContext private val context: Context,
     private val chatRepository: ChatRepository,
     private val userRepository: UserRepository,
     private val savedStateHandle: SavedStateHandle,
-    private val imageStorageRepository: ImageStorageRepository
-    // [삭제] StompService, CurrentScreenManager, ChatNotificationHelper
+    private val imageStorageRepository: ImageStorageRepository,
+    private val stompService: StompService // 👈 [수정 2] StompService 주입
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -115,7 +117,7 @@ class MainViewModel @Inject constructor(
             )
 
     init {
-        // [추가] ChatService가 실행 중이 아니라면 시작시킴
+        // [유지] ChatService가 실행 중이 아니라면 시작시킴
         if (!ChatService.isRunning()) {
             Log.d("MainViewModel", "ChatService가 실행 중이 아니므로 시작합니다.")
             startChatService()
@@ -142,12 +144,43 @@ class MainViewModel @Inject constructor(
                             "ChatReadDebug",
                             "5. Processed and removed chatId from SavedStateHandle."
                         )
+
+                        // 👈 [수정 4] 읽음 처리 직후에도 목록 갱신 (unreadCount 반영)
+                        refreshChatList()
                     }
+                }
+        }
+
+        // ▼▼▼ [수정된 부분] 새 채팅방 생성 후 복귀 시 강제 갱신 로직 추가 ▼▼▼
+        viewModelScope.launch {
+            savedStateHandle.getStateFlow<Boolean?>("new_chat_created", null)
+                .collect { isNew ->
+                    if (isNew == true) {
+                        Log.d("MainViewModel", "✅ 'new_chat_created' 플래그 수신. 채팅 목록을 강제로 갱신합니다.")
+                        refreshChatList()
+                        savedStateHandle.remove<Boolean>("new_chat_created")
+                    }
+                }
+        }
+        // ▲▲▲ [수정 완료] ▲▲▲
+
+        // 👈 [수정 4] STOMP 메시지 구독 (실시간 갱신)
+        viewModelScope.launch {
+            Log.d("MainViewModel_STOMP", "STOMP 'messages' Flow 구독 시작")
+            stompService.messages
+                .debounce(1500L) // 1.5초간 메시지 폭주 방지
+                .collect { messageJson ->
+                    // 어떤 메시지든 받으면 (새 채팅방이든, 기존 채팅방이든)
+                    // 채팅방 목록 전체를 서버로부터 다시 받아옵니다.
+                    Log.d("MainViewModel_STOMP", "🔥 STOMP 메시지 수신 (Debounced)! 채팅 목록을 갱신합니다.")
+                    Log.d("MainViewModel_STOMP", " > 수신 메시지(참고용): $messageJson")
+
+                    refreshChatList() // 2단계에서 만든 함수 호출
                 }
         }
     }
 
-    // [추가] 서비스 시작 함수
+    // [유지] 서비스 시작 함수
     private fun startChatService() {
         val serviceIntent = Intent(context, ChatService::class.java).apply {
             action = ChatService.ACTION_START
@@ -155,7 +188,7 @@ class MainViewModel @Inject constructor(
         ContextCompat.startForegroundService(context, serviceIntent)
     }
 
-    // [추가] (로그아웃 함수가 여기 있다면) 서비스 중지 함수
+    // [유지] (로그아웃 함수가 여기 있다면) 서비스 중지 함수
     /**
      * 사용자가 로그아웃을 요청할 때 호출됩니다.
      */
@@ -168,7 +201,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // [추가] 서비스 중지 함수
+    // [유지] 서비스 중지 함수
     private fun stopChatService() {
         val serviceIntent = Intent(context, ChatService::class.java).apply {
             action = ChatService.ACTION_STOP
@@ -177,16 +210,82 @@ class MainViewModel @Inject constructor(
     }
 
 
-    // [유지] 서버 데이터를 가져와 Presigned URL 처리 후 'Room DB'에 저장
+    /**
+     * 👈 [수정 3] 신규 함수: 채팅 목록만 서버에서 새로고침하고 Room DB를 덮어씁니다.
+     * (백그라운드 갱신용 - isLoading 상태를 건드리지 않음)
+     */
+    private fun refreshChatList() {
+        viewModelScope.launch {
+            val chatResult = chatRepository.getChatRoomList(page = 0)
+
+            if (chatResult is ApiResult.Success) {
+                var thumbnailUrl: String? = null
+
+                val chatList = chatResult.data.data?.chats ?: emptyList()
+                Log.d("MainViewModel_Refresh", "✅ Chat list DTO loaded: ${chatList.size} rooms")
+
+                val chatListWithUrls: List<ChatRoomInfo> =
+                    chatList.map { chatRoomInfo ->
+                        async {
+                            val thumbnailKey =
+                                chatRoomInfo.product.thumbnail?.removePrefix(AppConstants.S3_BASE_URL)
+
+                            Log.d("MainViewModel_Refresh", "✅ thumbnailKey : ${thumbnailKey}")
+
+                            if (thumbnailKey != null) {
+                                try {
+                                    thumbnailUrl =
+                                        imageStorageRepository.getPresignedImageUrl(thumbnailKey)
+                                            .getOrNull()
+                                    Log.d(
+                                        "MainViewModel_Refresh",
+                                        "✅ thumbnailUrl : ${thumbnailUrl}"
+                                    )
+
+                                } catch (e: Exception) {
+                                    Log.d("MainViewModel_Refresh", "✅ 실패 : 실패")
+                                    Log.e(
+                                        "MainViewModel_Refresh",
+                                        "❌ Failed to load Thumbnail Presigned URL (chatId: ${chatRoomInfo.chatId})",
+                                        e
+                                    )
+                                }
+                            }
+                            chatRoomInfo.copy(viewableThumbnailUrl = thumbnailUrl)
+                        }
+                    }.awaitAll()
+
+                try {
+                    chatRepository.cacheChatRoomList(chatListWithUrls)
+                    Log.d("MainViewModel_Refresh", "✅ Fetched list (with URLs) saved to Room.")
+                } catch (e: Exception) {
+                    Log.e("MainViewModel_Refresh", "❌ Failed to save chat list to Room", e)
+                }
+
+            } else {
+                Log.w(
+                    "MainViewModel_Refresh",
+                    "❌ Chat list fetch failed. Will use cached data if available."
+                )
+            }
+            // (isLoading = false) 로직은 여기서 제거!
+        }
+    }
+
+
+    // 👈 [수정 4] 기존 loadInitialData 함수 수정
     private fun loadInitialData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val chatRoomsJob = async { chatRepository.getChatRoomList(page = 0) }
+            // ▼▼▼ [수정] 채팅방 로직을 refreshChatList() 호출로 변경 ▼▼▼
+            val chatRoomsJob = async { refreshChatList() }
             val userProfileJob = async { userRepository.fetchAndSaveUserProfile() }
 
-            val chatResult = chatRoomsJob.await()
+            // ▼▼▼ [수정] chatRoomsJob.await() 추가, profileResult는 뒤에서 await ▼▼▼
+            chatRoomsJob.await()
             val profileResult = userProfileJob.await()
+            // ▲▲▲ [수정] ▲▲▲
 
 
             // ▼▼▼ 프로필 로직 (유지) ▼▼▼
@@ -216,58 +315,9 @@ class MainViewModel @Inject constructor(
             // ▲▲▲ 프로필 로직 (유지) ▲▲▲
 
 
-            // ▼▼▼ [유지] 채팅 목록 로직 ▼▼▼
-            if (chatResult is ApiResult.Success) {
-                var thumbnailUrl: String? = null
-
-                val chatList = chatResult.data.data?.chats ?: emptyList()
-                Log.d("MainViewModel", "✅ Chat list DTO loaded: ${chatList.size} rooms")
-
-                val chatListWithUrls: List<ChatRoomInfo> =
-                    chatList.map { chatRoomInfo ->
-                        async {
-                            val thumbnailKey =
-                                chatRoomInfo.product.thumbnail?.removePrefix(AppConstants.S3_BASE_URL)
-
-                            Log.d("MainViewMode2l", "✅ thumbnailKey : ${thumbnailKey}")
-
-                            if (thumbnailKey != null) {
-                                try {
-                                    thumbnailUrl =
-                                        imageStorageRepository.getPresignedImageUrl(thumbnailKey)
-                                            .getOrNull()
-                                    Log.d("MainViewMode2l", "✅ thumbnailUrl : ${thumbnailUrl}")
-
-                                } catch (e: Exception) {
-                                    Log.d("MainViewMode2l", "✅ 실패 : 실패")
-                                    Log.e(
-                                        "MainViewModel",
-                                        "❌ Failed to load Thumbnail Presigned URL (chatId: ${chatRoomInfo.chatId})",
-                                        e
-                                    )
-                                }
-                            }
-                            chatRoomInfo.copy(viewableThumbnailUrl = thumbnailUrl)
-                        }
-                    }.awaitAll()
-
-                try {
-                    chatRepository.cacheChatRoomList(chatListWithUrls)
-                    Log.d("MainViewModel", "✅ Fetched list (with URLs) saved to Room.")
-                } catch (e: Exception) {
-                    Log.e("MainViewModel", "❌ Failed to save chat list to Room", e)
-                }
-
-                Log.d("MainViewModel", "✅ 서버에서 받아온 User 데이터 확인: $userProfileJob")
-                Log.d("MainViewModel", "✅ 서버에서 받아온 Chat 데이터 확인: $chatList")
-                Log.d("MainViewMode2l", "✅ s3 서버에서 받아온 url 데이터 확인: $thumbnailUrl")
-
-            } else {
-                Log.w(
-                    "MainViewModel",
-                    "❌ Chat list fetch failed. Will use cached data if available."
-                )
-            }
+            // ▼▼▼ [삭제] 기존 채팅 목록 로직은 refreshChatList()로 이동했으므로 여기선 삭제 ▼▼▼
+            // if (chatResult is ApiResult.Success) { ... } 블록 전체 삭제
+            // ▲▲▲ [삭제] ▲▲▲
 
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -311,7 +361,7 @@ class MainViewModel @Inject constructor(
     }
     // ---------------------------------------------------
 
-    // [수정] onCleared()에서 STOMP 연결 해제 로직 삭제
+    // [유지] onCleared()에서 STOMP 연결 해제 로직 삭제
     override fun onCleared() {
         Log.d("MainViewModel", "onCleared: ViewModel 파괴")
         super.onCleared()

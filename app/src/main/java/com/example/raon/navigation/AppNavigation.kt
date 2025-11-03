@@ -17,6 +17,9 @@ import com.example.raon.core.notification.TestNotificationScreen
 import com.example.raon.features.category.ui.CategoryScreen
 import com.example.raon.features.category.ui.CategoryViewModel
 import com.example.raon.features.chat.ui.ChatRoomScreen
+// ▼▼▼ [ 1. 이 import 문 제거 ] ▼▼▼
+// import com.example.raon.features.chat.ui.ChatRoomViewModel
+// ▲▲▲ [ 1. 이 import 문 제거 ] ▲▲▲
 import com.example.raon.features.item.ui.add.AddItemEvent
 import com.example.raon.features.item.ui.add.AddItemScreen
 import com.example.raon.features.item.ui.add.AddItemViewModel
@@ -190,17 +193,31 @@ fun AppNavigation(
                 }
             )
         ) {
+            // ▼▼▼ [ 2. 이 부분 제거 ] ▼▼▼
+            // (ChatRoomScreen이 내부적으로 hiltViewModel()을 호출하므로 여기서 호출 불필요)
+            // val viewModel: ChatRoomViewModel = hiltViewModel()
+            // val didSendMessage by viewModel.didSendMessage.collectAsStateWithLifecycle()
+            // ▲▲▲ [ 2. 이 부분 제거 ] ▲▲▲
+
             ChatRoomScreen(
+                // ChatRoomScreen은 내부적으로 hiltViewModel()을 호출하여
+                // ViewModel 인스턴스를 사용합니다.
+
                 onBackClick = { chatId ->
                     try {
+                        // ▼▼▼ [ 3. 이 로직 수정 ] ▼▼▼
+                        // 'if (didSendMessage)' 검사를 제거하고 항상 '읽음' ID를 전달합니다.
+                        // (새 채팅방 갱신은 ChatRoomViewModel이 "new_chat_created"로 처리)
                         Log.d(
                             "ChatReadDebug",
-                            "2. AppNavigation trying to set result for 'main_graph'. chatId: $chatId"
+                            "2. AppNavigation: BackClick. Setting read result. chatId: $chatId"
                         )
                         navController.getBackStackEntry("main_graph")
                             .savedStateHandle
-                            .set("read_chat_room_id", chatId)
+                            .set("read_chat_room_id", chatId) // 👈 '읽음' 처리 신호
                         Log.d("ChatReadDebug", "3. Successfully set the result.")
+
+                        // ▲▲▲ [ 3. 이 로직 수정 ] ▲▲▲
                     } catch (e: Exception) {
                         Log.e("ChatReadDebug", "Failed to get back stack entry 'main_graph'", e)
                     }

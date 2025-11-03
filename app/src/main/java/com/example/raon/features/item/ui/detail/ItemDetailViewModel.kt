@@ -36,6 +36,9 @@ sealed class ItemDetailEvent {
     object ProductDeleted : ItemDetailEvent()
     object ShowProductNotFoundError : ItemDetailEvent()
     object Refresh : ItemDetailEvent()
+
+    // 채팅방 생성 완료 이벤트
+    data class ChatRoomCreated(val newChatId: Long) : ItemDetailEvent() //
 }
 
 // ------------------- ViewModel -------------------
@@ -82,6 +85,10 @@ class ItemDetailViewModel @Inject constructor(
             }
 
             is ItemDetailEvent.ShowProductNotFoundError -> { /* Do nothing */
+            }
+
+            is ItemDetailEvent.ChatRoomCreated -> {
+                /* Do nothing */
             }
         }
     }
@@ -214,6 +221,10 @@ class ItemDetailViewModel @Inject constructor(
     private suspend fun createChatRoom(itemId: Long) {
         when (val result = itemRepository.createChatForItem(itemId)) {
             is ApiResult.Success -> {
+
+                val newChatId = result.data.data.chatId
+                // [수정] 네비게이션 전에 채팅방 생성 완료 이벤트를 먼저 보냅니다.
+                _eventFlow.emit(ItemDetailEvent.ChatRoomCreated(newChatId)) //
                 _eventFlow.emit(ItemDetailEvent.NavigateToChatRoom(result.data.data.chatId))
             }
 

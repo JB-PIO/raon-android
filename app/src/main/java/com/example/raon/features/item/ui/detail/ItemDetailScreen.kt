@@ -138,6 +138,11 @@ fun ItemDetailScreen(
                 // 이 블록에서는 Refresh 이벤트를 받을 일이 없으므로 아무것도 하지 않습니다.
                 is ItemDetailEvent.Refresh -> { /* Do nothing */
                 }
+
+                // [추가] 새로운 이벤트에 대한 처리입니다.
+                // 이 스크린에서는 네비게이션만 하면 되므로, 아무것도 하지 않습니다.
+                is ItemDetailEvent.ChatRoomCreated -> { /* Do nothing, handled by NavHost */
+                } //
             }
         }
     }

@@ -11,6 +11,7 @@ import com.example.raon.core.common.toKSTLocalDateTime
 import com.example.raon.core.common.toRelativeTimeString
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.repository.ImageStorageRepository
+import com.example.raon.features.chat.data.local.ChatRoomEntity // 🔽🔽🔽 [추가] ChatRoomEntity 임포트
 import com.example.raon.features.chat.data.remote.StompService
 import com.example.raon.features.chat.data.remote.dto.ChatMessageDto
 import com.example.raon.features.chat.data.remote.dto.UserInChatDetailDto
@@ -92,9 +93,11 @@ class ChatRoomViewModel @Inject constructor(
     private val stompService: StompService,
     private val currentScreenManager: CurrentScreenManager,
 
-    savedStateHandle: SavedStateHandle,
+    // ▼▼▼ [수정 2] 'savedStateHandle'을 생성자 파라미터에서 클래스 프로퍼티(private val)로 변경 ▼▼▼
+    private val savedStateHandle: SavedStateHandle
+    // ▲▲▲ [수정 완료] ▲▲▲
 
-    ) : ViewModel() {
+) : ViewModel() {
 
     val chatRoomId: Long = savedStateHandle.get<String>("chatRoomId")?.toLongOrNull() ?: -1L
 
@@ -104,9 +107,13 @@ class ChatRoomViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
+    // ▼▼▼ [ 1. (수정 1단계) 이 두 줄을 추가 ] ▼▼▼
+    // ChatRoomEntity 생성을 위해 판매자와 구매자 정보를 저장할 변수
+    private var _sellerInfo: UserInChatDetailDto? = null
+    private var _buyerInfo: UserInChatDetailDto? = null
+    // ▲▲▲ [ 1. 추가 완료 ] ▲▲▲
+
     init {
-
-
         Log.d("ChatViewModel", "0. Initializing with chatId: $chatRoomId")
 
         // ViewModel 생성 시 (채팅방 진입) 현재 방 ID 설정
@@ -123,6 +130,9 @@ class ChatRoomViewModel @Inject constructor(
                 // [수정됨] 함수 이름 변경 및 연결 로직 제거
                 observeStompMessages()
             } else {
+                // [참고] 만약 -1L일 때(새 채팅) 상품 정보를 로드해야 한다면,
+                // 여기서 'itemId'를 savedStateHandle에서 꺼내 별도 함수(예: loadProductInfo(itemId))를 호출해야 합니다.
+                // 현재 로직은 -1L이면 아무 정보도 로드하지 않습니다.
                 val errorMsg =
                     if (chatRoomId == -1L) "Invalid chat room ID." else "Could not load user info."
                 _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
@@ -145,6 +155,12 @@ class ChatRoomViewModel @Inject constructor(
                         is ApiResult.Error -> throw Exception("Chat details load failed: ${detailsResult.code}")
                         is ApiResult.Exception -> throw detailsResult.e
                     }
+
+                // ▼▼▼ [ 2. (수정 2단계) 이 두 줄을 추가 ] ▼▼▼
+                // 1단계에서 추가한 변수에 API 응답 데이터 저장
+                _sellerInfo = chatDetailsData.seller
+                _buyerInfo = chatDetailsData.buyer
+                // ▲▲▲ [ 2. 추가 완료 ] ▲▲▲
 
                 val opponentUser: UserInChatDetailDto
                 val isBuyer: Boolean
@@ -288,8 +304,17 @@ class ChatRoomViewModel @Inject constructor(
     }
 
     fun sendMessage(text: String) {
+        // [참고] 현재 로직은 chatRoomId가 -1L(새 채팅)이면
+        // 메시지 전송을 막고 있습니다. (init 로직과 이 return 구문)
+        // 만약 -1L일 때 "채팅방 생성" API를 호출해야 한다면
+        // 이 부분을 수정해야 합니다. (예: sendFirstMessage(itemId, text))
         if (text.isBlank() || chatRoomId == -1L) return
         val currentMyId = _myUserId.value ?: return
+
+        // ▼▼▼ [수정 4] "첫 메시지"인지 판단하기 위해 현재 메시지 목록 상태 저장 ▼▼▼
+        // (메시지가 비어있었다면, 이게 첫 메시지임)
+        val isFirstMessage = _uiState.value.messages.isEmpty()
+        // ▲▲▲ [수정 완료] ▲▲▲
 
         val now = Instant.now()
         val originalTimestamp = now.toString()
@@ -316,9 +341,68 @@ class ChatRoomViewModel @Inject constructor(
             currentState.copy(messages = updatedMessages)
         }
 
-        viewModelScope.launch {
-            chatRepository.sendMessage(chatRoomId, text)
+        // ▼▼▼ [수정 5] _didSendMessage.value = true 대신, isFirstMessage일 때만 플래그 설정 ▼▼▼
+        if (isFirstMessage) {
+            // MainViewModel이 감지할 수 있도록 SavedStateHandle에 값을 씁니다.
+            savedStateHandle.set("new_chat_created", true)
+            Log.d("ChatRoomViewModel", "첫 메시지 전송 감지. 'new_chat_created' 플래그 설정!")
         }
+        // ▲▲▲ [수정 완료] ▲▲▲
+
+        // ▼▼▼ [ 3. (수정 3단계) 이 블록을 통째로 수정 ] ▼▼▼
+        viewModelScope.launch {
+            // 1. API 호출 결과를 변수로 받습니다.
+            val result = chatRepository.sendMessage(chatRoomId, text)
+
+            // 2. API 호출이 성공했는지 확인합니다.
+            if (result is ApiResult.Success) {
+
+                // 3. [핵심] 첫 메시지였는지 확인합니다.
+                if (isFirstMessage) {
+                    val sentMessageDto = result.data.data // 방금 보낸 메시지 정보
+                    val productInfo = _uiState.value.productInfo // 상단 바 상품 정보
+                    val seller = _sellerInfo // 2단계에서 저장한 판매자 정보
+                    val buyer = _buyerInfo   // 2단계에서 저장한 구매자 정보
+
+                    // 4. Entity 생성에 필요한 모든 정보가 있는지 확인
+                    if (sentMessageDto != null && productInfo != null && seller != null && buyer != null) {
+
+                        // 5. ChatRoomEntity 객체 생성 (사용자가 제공한 Entity 양식에 맞게)
+                        val newRoomEntity = ChatRoomEntity(
+                            chatroomId = this@ChatRoomViewModel.chatRoomId, // 현재 채팅방 ID
+                            opponentProfileUrl = productInfo.viewableThumbnailUrl, // 상품 썸네일
+                            lastMessage = sentMessageDto.content, // 방금 보낸 메시지
+                            lastMessageTime = sentMessageDto.sentAt, // 방금 보낸 시간
+                            unreadCount = 0, // 내가 보냈으므로 안읽은 개수 0
+                            productId = productInfo.itemId, // 상품 ID
+                            sellerId = seller.userId,
+                            buyerId = buyer.userId,
+                            sellerNickname = seller.nickname,
+                            buyerNickname = buyer.nickname
+                        )
+
+                        // 6. Repository를 통해 Room DB에 저장(캐시)
+                        // (ChatRepositoryImpl에 이미 구현된 cacheSingleChatRoom 함수 호출)
+                        chatRepository.cacheSingleChatRoom(newRoomEntity)
+                        Log.d("ChatRoomViewModel", "✅ 첫 메시지 전송 성공, ChatRoomEntity 캐시 완료!")
+
+                    } else {
+                        Log.w(
+                            "ChatRoomViewModel",
+                            "⚠️ ChatRoomEntity 캐시 실패: 필요한 정보 부족 (MessageDto, ProductInfo, Seller, Buyer)"
+                        )
+                    }
+                }
+
+            } else {
+                // (선택사항) 메시지 전송 실패 처리 (예: 낙관적 UI 롤백)
+                Log.e("ChatRoomViewModel", "❌ 메시지 전송 API 실패: $result")
+                _uiState.update {
+                    it.copy(messages = it.messages.filterNot { msg -> msg.messageId == optimisticMessage.messageId })
+                }
+            }
+        }
+        // ▲▲▲ [ 3. 수정 완료 ] ▲▲▲
     }
 
     /**

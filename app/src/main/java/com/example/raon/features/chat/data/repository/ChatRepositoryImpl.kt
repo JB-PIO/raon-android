@@ -1,8 +1,5 @@
 package com.example.raon.features.chat.data.repository
 
-// 🔽🔽🔽 [필수 Import] SSoT 구현을 위해 새로 Import 해야 하는 것들 🔽🔽🔽
-// 🔽 [DTO Import] API/STOMP/Mapper에서 사용하는 모든 DTO들 🔽
-// 🔽 [Domain Model Import] ViewModel로 전달할 최종 모델 🔽
 import android.util.Log
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.dto.ApiResponse
@@ -51,12 +48,12 @@ class ChatRepositoryImpl @Inject constructor(
     ): ApiResult<ApiResponse<MessageListDto>> {
         val result = handleApi { chatApiService.getMessages(chatId, page) }
 
-        // 🔽 [수정] 성공 시 'MessageDto'를 Room에 저장
+        // 성공 시 'MessageDto'를 Room에 저장
         if (result is ApiResult.Success) {
             // DTO 구조: result.data.data.messages (List<MessageDto>)
             result.data?.data?.messages?.let { messageDtoList ->
                 try {
-                    // 🔽 [충돌 해결] 'MessageDto.toEntity()' 매퍼 사용 (하단 정의)
+                    // 'MessageDto.toEntity()' 매퍼 사용 (하단 정의)
                     val entities = messageDtoList.map { it.toEntity() }
                     chatDao.insertMessages(entities) // (DAO에 OnConflictStrategy.REPLACE 필요)
                 } catch (e: Exception) {
@@ -73,15 +70,15 @@ class ChatRepositoryImpl @Inject constructor(
         Log.d("ChatRepository_getChat", "🚀 Fetching chat room details for chatId: $chatId")
         val result = handleApi { chatApiService.getChatRoomDetails(chatId) }
 
-        // 🔽 [수정] 성공 시 'ChatMessageDto'를 Room에 저장
+        // 성공 시 'ChatMessageDto'를 Room에 저장
         if (result is ApiResult.Success) {
             // DTO 구조: result.data.messages (List<ChatMessageDto>)
 //            result.data.message.let { chatMessageDtoList ->
 //                try {
-//                    // 🔽 [충돌 해결] 'ChatMessageDto.toEntity()' 매퍼 사용 (하단 정의)
+//                    // 'ChatMessageDto.toEntity()' 매퍼 사용 (하단 정의)
 //                    val entities = chatMessageDtoList.map { it.toEntity() }
 //                    chatDao.insertMessages(entities) // (DAO에 OnConflictStrategy.REPLACE 필요)
-//                    Log.d("ChatRepository", "✅ Room DB에 ${entities.size}개 메시지 덮어쓰기 완료")
+//                    Log.d("ChatRepository", " Room DB에 ${entities.size}개 메시지 덮어쓰기 완료")
 //                } catch (e: Exception) {
 //                    Log.e("ChatRepository", "getChatRoomDetails DB 저장 실패", e)
 //                }
@@ -138,7 +135,7 @@ class ChatRepositoryImpl @Inject constructor(
     }
 
     /**
-     * [수정] 이 함수는 이제 DB 업데이트 로직을 '제거'하고,
+     * 이 함수는 이제 DB 업데이트 로직을 '제거'하고,
      * 원본 STOMP Flow를 그대로 반환합니다.
      */
     override fun observeMessages(chatId: Long): Flow<String> {
@@ -151,7 +148,7 @@ class ChatRepositoryImpl @Inject constructor(
     }
 
     /**
-     * [신설] STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
+     * STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
      * MainViewModel이 이 함수를 호출할 것입니다.
      */
     override suspend fun cacheStompMessages() {
@@ -168,7 +165,7 @@ class ChatRepositoryImpl @Inject constructor(
                     chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
                     Log.d("ChatRepository", "STOMP 메시지 DB 저장 성공")
 
-                    // 🔽🔽🔽 [필수 추가] 채팅방 목록 테이블도 업데이트 🔽🔽🔽
+                    // 채팅방 목록 테이블도 업데이트
                     chatDao.updateChatRoomSummary(
                         roomId = entity.roomId,
                         lastMessage = entity.content,
@@ -274,6 +271,25 @@ class ChatRepositoryImpl @Inject constructor(
             Log.e("ChatRepository", "cacheChatRoomList DB 저장 실패", e)
         }
     }
+
+    // ▼▼▼ [ 1. 이 함수 추가 ] ▼▼▼
+    /**
+     * [신규] ViewModel이 '수동으로 생성한' 새 채팅방 Entity 1개를 Room에 저장합니다.
+     */
+    override suspend fun cacheSingleChatRoom(roomEntity: ChatRoomEntity) {
+        try {
+            // ChatDao의 insertChatRooms(List<...>) 함수를 사용합니다.
+            chatDao.insertChatRooms(listOf(roomEntity))
+            Log.d(
+                "ChatRepository",
+                "✅ (ViewModel) Room DB에 새 채팅방 1개(${roomEntity.chatroomId}) 저장 완료"
+            )
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "cacheSingleChatRoom DB 저장 실패", e)
+        }
+    }
+    // ▲▲▲ [ 수정 완료 ] ▲▲▲
+
 
     /**
      * [신규] ViewModel이 특정 채팅방을 Room에서 '읽음' 처리합니다.

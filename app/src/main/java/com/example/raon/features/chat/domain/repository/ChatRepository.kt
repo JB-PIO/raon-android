@@ -4,6 +4,7 @@ package com.example.raon.features.chat.domain.repository
 // [신규] MainViewModel이 DTO를 전달하므로 Import 필요
 import com.example.raon.core.network.ApiResult
 import com.example.raon.core.network.dto.ApiResponse
+import com.example.raon.features.chat.data.local.ChatRoomEntity // [수정 1] import 추가
 import com.example.raon.features.chat.data.remote.dto.ChatRoomDetailResponse
 import com.example.raon.features.chat.data.remote.dto.ChatRoomInfo
 import com.example.raon.features.chat.data.remote.dto.ChatRoomListDto
@@ -109,4 +110,11 @@ interface ChatRepository {
      * [신설] ViewModel이 특정 채팅방을 Room에서 '읽음' 처리합니다.
      */
     suspend fun markRoomAsReadInDb(chatId: Long)
+
+    // ▼▼▼ [ 2. 이 함수 추가 ] ▼▼▼
+    /**
+     * [신규] ViewModel이 '수동으로 생성한' 새 채팅방 Entity 1개를 Room에 저장합니다.
+     */
+    suspend fun cacheSingleChatRoom(roomEntity: ChatRoomEntity)
+    // ▲▲▲ [ 수정 완료 ] ▲▲▲
 }
