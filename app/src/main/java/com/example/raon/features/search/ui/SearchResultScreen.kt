@@ -140,7 +140,7 @@ fun SearchResultScreen(
             "viewCount,desc" to "조회수순",
             "price,asc" to "낮은 가격순",
             "price,desc" to "높은 가격순",
-            "location,asc" to "가까운순"
+//            "location,asc" to "가까운순"
         )
     }
 

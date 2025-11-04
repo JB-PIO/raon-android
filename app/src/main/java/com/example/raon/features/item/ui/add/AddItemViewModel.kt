@@ -151,13 +151,13 @@ class AddItemViewModel @Inject constructor(
     private fun submitItem() {
         // 수정된 부분: 중복 실행 방지 가드 강화
         // 1. 로딩 중이거나 2. 이미 성공했다면 함수를 즉시 종료
-//        if (_uiState.value.isLoading || _uiState.value.isSuccess) {
-//            Log.d(
-//                "AddItemViewModel",
-//                " 중복 제출 시도 감지 (isLoading=${_uiState.value.isLoading}, isSuccess=${_uiState.value.isSuccess}). 요청을 무시합니다."
-//            )
-//            return
-//        }
+        if (_uiState.value.isLoading || _uiState.value.isSuccess) {
+            Log.d(
+                "AddItemViewModel",
+                " 중복 제출 시도 감지 (isLoading=${_uiState.value.isLoading}, isSuccess=${_uiState.value.isSuccess}). 요청을 무시합니다."
+            )
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }

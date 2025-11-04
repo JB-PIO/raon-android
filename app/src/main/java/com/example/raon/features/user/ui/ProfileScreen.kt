@@ -23,14 +23,12 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -115,12 +113,14 @@ fun ProfileTopAppBar(navController: NavController) {
     TopAppBar(
         title = { Text("프로필") },
         actions = {
-            IconButton(onClick = { navController.navigate("settings_screen") }) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "설정으로 이동"
-                )
-            }
+
+            // 중복으로 일단 주석
+//            IconButton(onClick = { navController.navigate("settings_screen") }) {
+//                Icon(
+//                    imageVector = Icons.Default.Settings,
+//                    contentDescription = "설정으로 이동"
+//                )
+//            }
         }
     )
 }
@@ -223,7 +223,7 @@ fun ProfileMenuList(
             color = BrandDarkText,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
-        MenuRow(icon = Icons.Filled.ShoppingCart, title = "구매내역", onClick = { /*TODO*/ })
+//        MenuRow(icon = Icons.Filled.ShoppingCart, title = "구매내역", onClick = { /*TODO*/ })
         Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
         // 판매내역
