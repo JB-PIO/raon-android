@@ -1,6 +1,7 @@
 package com.example.raon.features.user.domain.usecase
 
 import com.example.raon.features.auth.data.repository.AuthRepository
+import com.example.raon.features.chat.domain.repository.ChatRepository
 import com.example.raon.features.search.domain.repository.SearchRepository
 import com.example.raon.features.user.domain.repository.UserRepository
 // import com.example.raon.features.chat.domain.repository.ChatRepository // (만약 채팅 캐시도 지워야 한다면)
@@ -15,8 +16,9 @@ import javax.inject.Inject
 class LogoutUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
-    private val searchRepository: SearchRepository // <-- 2. SearchRepository 주입
+    private val searchRepository: SearchRepository, // <-- 2. SearchRepository 주입
     // private val chatRepository: ChatRepository // (예시)
+    private val chatRepository: ChatRepository // [2. 주입 추가]
 ) {
     suspend operator fun invoke() {
         // 1. 인증 정보 삭제 (토큰, 쿠키) (DataStore)
@@ -28,7 +30,12 @@ class LogoutUseCase @Inject constructor(
 
         // 3. (필요시) 다른 모든 로컬 데이터 삭제 (Room DB)
         searchRepository.deleteAllRecentSearches()
-        
+
+
+        // [3. 삭제 로직 추가]
+        chatRepository.deleteAllLocalChatRooms()
+        chatRepository.deleteAllLocalChatMessages()
+
         // chatRepository.clearChatCache()
     }
 }

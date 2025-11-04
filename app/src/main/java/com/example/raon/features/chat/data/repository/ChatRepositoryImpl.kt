@@ -161,15 +161,83 @@ class ChatRepositoryImpl @Inject constructor(
      * STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
      * [수정됨] 새 채팅방 감지 및 추가 로직을 포함합니다.
      */
+//    override suspend fun cacheStompMessages() {
+//
+//        // 1. [수정] 이미 실행 중이면 로그를 남기고 즉시 종료합니다.
+//        if (isStompCachingRunning) {
+//            Log.d("ChatRepository", "⚠️ STOMP 메시지 캐싱이 이미 실행 중입니다. 중복 호출을 무시합니다.")
+//            return
+//        }
+//
+//        // 2. [수정] 플래그를 설정하고, try-finally 구문을 사용하여 종료 시 플래그를 해제합니다.
+//        isStompCachingRunning = true
+//        Log.d("ChatRepository", "🚀 Starting STOMP message caching...")
+//        try {
+//            // stompService.messages를 구독하여 DB에 저장
+//            stompService.messages.collect { messagePayload ->
+//                // 1. (DB 저장 로직)
+//                try {
+//                    // STOMP는 'ChatMessageDto' 형식을 사용한다고 가정
+//                    val messageDto = gson.fromJson(messagePayload, ChatMessageDto::class.java)
+//                    val entity = messageDto.toEntity()
+//
+//                    chatDao.insertMessage(entity) // (DAO에 OnConflictStrategy.REPLACE 필요)
+//                    Log.d("ChatRepository", "STOMP 메시지 DB 저장 성공")
+//
+//                    // ▼▼▼ [수정] 2단계: '스마트' 업데이트 로직 (새 채팅방 감지) ▼▼▼
+//                    // 2-1. 채팅방 목록 테이블 업데이트 시도 (ChatDao.kt가 :Int를 반환한다고 가정)
+//                    val updatedRows = chatDao.updateChatRoomSummary(
+//                        roomId = entity.roomId,
+//                        lastMessage = entity.content,
+//                        lastMessageTime = entity.sendTime // Entity의 원본 시간
+//                    )
+//
+//                    // 2-2. [핵심] 만약 업데이트된 행이 0개라면 (updatedRows == 0),
+//                    //      이것은 '새로운 채팅방'이라는 의미입니다.
+//                    if (updatedRows == 0) {
+//                        Log.d(
+//                            "ChatRepository",
+//                            "🔥 STOMP: 새로운 채팅방(${entity.roomId}) 감지! Placeholder Entity를 생성합니다."
+//                        )
+//
+//
+//                        // 2-3. 임시 채팅방 정보를 생성하여 Room DB에 INSERT
+//                        createPlaceholderChatRoom(entity)
+//                    } else {
+//                        Log.d("ChatRepository", "STOMP: 기존 채팅방(${entity.roomId}) 요약 DB 업데이트 성공")
+//                    }
+//                    // ▲▲▲ [수정] 완료 ▲▲▲
+//
+//                } catch (e: Exception) {
+//                    Log.e("ChatRepository", "STOMP 메시지 파싱 또는 DB 저장 실패", e)
+//                } finally {
+//                    // 3. 💡 [수정] 예외나 취소로 collect가 종료되면 플래그를 해제합니다.
+//                    isStompCachingRunning = false
+//                    Log.d("ChatRepository", "STOMP message caching collector terminated.")
+//                }
+//            }
+//        } catch (e: CancellationException) {
+//            Log.d("ChatRepository", "STOMP caching이 취소되었습니다.")
+//            throw e
+//        } catch (e: Exception) {
+//            Log.e("ChatRepository", "STOMP caching collect 실패", e)
+//        }
+//    }
+
+
+    /**
+     * STOMP 메시지를 DB에 저장하는, 단일 책임을 가진 함수.
+     * [수정됨] 새 채팅방 감지 시 'getChatRoomDetails'를 호출하여 썸네일 등을 가져옵니다.
+     */
     override suspend fun cacheStompMessages() {
 
-        // 1. 💡 [수정] 이미 실행 중이면 로그를 남기고 즉시 종료합니다.
+        // 1. [수정] 이미 실행 중이면 로그를 남기고 즉시 종료합니다.
         if (isStompCachingRunning) {
             Log.d("ChatRepository", "⚠️ STOMP 메시지 캐싱이 이미 실행 중입니다. 중복 호출을 무시합니다.")
             return
         }
 
-        // 2. 💡 [수정] 플래그를 설정하고, try-finally 구문을 사용하여 종료 시 플래그를 해제합니다.
+        // 2. [수정] 플래그를 설정하고, try-finally 구문을 사용하여 종료 시 플래그를 해제합니다.
         isStompCachingRunning = true
         Log.d("ChatRepository", "🚀 Starting STOMP message caching...")
         try {
@@ -177,7 +245,7 @@ class ChatRepositoryImpl @Inject constructor(
             stompService.messages.collect { messagePayload ->
                 // 1. (DB 저장 로직)
                 try {
-                    // 🔽 STOMP는 'ChatMessageDto' 형식을 사용한다고 가정
+                    // STOMP는 'ChatMessageDto' 형식을 사용한다고 가정
                     val messageDto = gson.fromJson(messagePayload, ChatMessageDto::class.java)
                     val entity = messageDto.toEntity()
 
@@ -197,10 +265,82 @@ class ChatRepositoryImpl @Inject constructor(
                     if (updatedRows == 0) {
                         Log.d(
                             "ChatRepository",
-                            "🔥 STOMP: 새로운 채팅방(${entity.roomId}) 감지! Placeholder Entity를 생성합니다."
+                            "🔥 STOMP: 새로운 채팅방(${entity.roomId}) 감지! 서버에서 상세 정보를 요청합니다."
                         )
-                        // 2-3. 임시 채팅방 정보를 생성하여 Room DB에 INSERT
-                        createPlaceholderChatRoom(entity)
+
+                        // 2-3. [!! 변경된 로직 !!] 'getChatRoomDetails' 호출
+                        when (val apiResult = getChatRoomDetails(entity.roomId)) {
+
+                            is ApiResult.Success -> {
+                                // 2-4. API 호출 성공. 응답의 'data' 필드(ChatRoomDetailDataDto)를 가져옴
+                                val responseData = apiResult.data?.data // (ChatRoomDetailDataDto?)
+
+                                if (responseData != null) {
+                                    try {
+                                        // 2-5. API 정보 + STOMP 정보를 조합하여 'ChatRoomEntity' 생성
+                                        val newRoomEntity = ChatRoomEntity(
+                                            // --- API(responseData)에서 가져오는 정보 ---
+                                            chatroomId = responseData.chatId,
+                                            // ▼▼▼ 요청하신 썸네일 URL ▼▼▼
+                                            opponentProfileUrl = responseData.product.thumbnail,
+                                            productId = responseData.product.productId.toInt(),
+                                            sellerId = responseData.seller.userId,
+                                            buyerId = responseData.buyer.userId,
+                                            sellerNickname = responseData.seller.nickname,
+                                            buyerNickname = responseData.buyer.nickname,
+
+                                            // --- STOMP(entity)에서 가져오는 정보 ---
+                                            lastMessage = entity.content,
+                                            lastMessageTime = entity.sendTime,
+                                            unreadCount = 1 // 새 방, 새 메시지이므로 1
+                                        )
+
+                                        chatDao.insertChatRooms(listOf(newRoomEntity))
+                                        Log.d(
+                                            "ChatRepository",
+                                            "✅ STOMP: 새 채팅방(${entity.roomId}) 상세 정보 Room DB 저장 완료"
+                                        )
+
+                                    } catch (e: Exception) {
+                                        // DTO 필드가 null이거나 (e.g. responseData.seller.nickname)
+                                        // DB 저장 중 예외 발생 시 Fallback
+                                        Log.e(
+                                            "ChatRepository",
+                                            "STOMP: 새 채팅방 상세 정보 파싱 또는 DB 저장 실패. Placeholder 생성.",
+                                            e
+                                        )
+                                        createPlaceholderChatRoom(entity) // Fallback
+                                    }
+                                } else {
+                                    // API 호출은 성공했으나 (code: "...") 응답의 data 필드가 null인 경우
+                                    Log.e(
+                                        "ChatRepository",
+                                        "STOMP: 새 채팅방(${entity.roomId}) 상세 정보 응답 데이터가 null입니다. Placeholder 생성."
+                                    )
+                                    createPlaceholderChatRoom(entity) // Fallback
+                                }
+                            }
+
+                            is ApiResult.Error -> {
+                                // 2-6. API 호출 실패 시 (e.g. 404, 500), 기존처럼 Placeholder 생성 (Fallback)
+                                Log.e(
+                                    "ChatRepository",
+                                    "STOMP: 새 채팅방(${entity.roomId}) 상세 정보 요청 실패. Placeholder를 생성합니다. Error: ${apiResult.errorBody}"
+                                )
+                                createPlaceholderChatRoom(entity)
+                            }
+
+                            is ApiResult.Exception -> {
+                                // 2-7. API 호출 중 네트워크 예외 발생 시, Placeholder 생성 (Fallback)
+                                Log.e(
+                                    "ChatRepository",
+                                    "STOMP: 새 채팅방(${entity.roomId}) 상세 정보 요청 중 예외 발생. Placeholder를 생성합니다.",
+                                    apiResult.e
+                                )
+                                createPlaceholderChatRoom(entity)
+                            }
+                        }
+
                     } else {
                         Log.d("ChatRepository", "STOMP: 기존 채팅방(${entity.roomId}) 요약 DB 업데이트 성공")
                     }
@@ -380,6 +520,17 @@ class ChatRepositoryImpl @Inject constructor(
             Log.e("ChatRepository", "markRoomAsReadInDb DB 업데이트 실패", e)
         }
     }
+
+    // ▼▼▼ [로그아웃/회원탈퇴 시 추가] ▼▼▼
+
+    override suspend fun deleteAllLocalChatRooms() {
+        chatDao.deleteAllChatRooms()
+    }
+
+    override suspend fun deleteAllLocalChatMessages() {
+        chatDao.deleteAllChatMessages()
+    }
+
 }
 
 

@@ -87,4 +87,22 @@ interface ChatDao {
     @Query("UPDATE chat_messages SET isRead = 1 WHERE roomId = :chatId")
     suspend fun markMessagesAsReadInDb(chatId: Long)
 
+
+    // ▼▼▼ [로그아웃/회원탈퇴 시 호출] ▼▼▼
+
+    /**
+     * 로컬 DB의 모든 채팅방 목록을 삭제합니다.
+     */
+    @Query("DELETE FROM chat_rooms")
+    suspend fun deleteAllChatRooms()
+
+    /**
+     * 로컬 DB의 모든 채팅 메시지를 삭제합니다.
+     */
+    @Query("DELETE FROM chat_messages")
+    suspend fun deleteAllChatMessages()
+
+    // ▲▲▲ [로그아웃/회원탈퇴 시 호출] ▲▲▲
+
+
 }

@@ -72,8 +72,10 @@ class SignUpViewModel @Inject constructor(
     fun signUp() {
         if (_uiState.value.signUpResult == SignUpResult.Loading) return
 
-        // 1. 빈칸 검사 로직 (기존과 동일)
+        // --- ✨ [수정] 유효성 검사 순서 및 내용 강화 ---
         val currentState = _uiState.value
+
+        // 1. 빈칸 검사
         if (currentState.nickname.isBlank() ||
             currentState.email.isBlank() ||
             currentState.password.isBlank() ||
@@ -87,6 +89,30 @@ class SignUpViewModel @Inject constructor(
             return
         }
 
+        // ✨ [추가] 닉네임 유효성 검사 (예: 2자 이상)
+        if (currentState.nickname.length < 2) {
+            _uiState.update {
+                it.copy(signUpResult = SignUpResult.Failure("닉네임은 2자 이상 입력해주세요."))
+            }
+            return
+        }
+
+        // ✨ [추가] 이메일 형식 유효성 검사
+        // (안드로이드 SDK에 내장된 이메일 패턴 사용)
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(currentState.email).matches()) {
+            _uiState.update {
+                it.copy(signUpResult = SignUpResult.Failure("이메일 형식이 올바르지 않습니다."))
+            }
+            return
+        }
+
+        // ✨ [추가] 비밀번호 유효성 검사 (예: 8자 이상)
+        if (currentState.password.length < 8) {
+            _uiState.update {
+                it.copy(signUpResult = SignUpResult.Failure("비밀번호는 8자 이상 입력해주세요."))
+            }
+            return
+        }
 
         // 2. 비밀번호 일치 여부 검사 (기존과 동일)
         if (currentState.password != currentState.passwordCheck) {

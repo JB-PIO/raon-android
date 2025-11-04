@@ -117,4 +117,17 @@ interface ChatRepository {
      */
     suspend fun cacheSingleChatRoom(roomEntity: ChatRoomEntity)
     // ▲▲▲ [ 수정 완료 ] ▲▲▲
+
+
+    // ▼▼▼ [로그아웃/회원탈퇴 시 추가] ▼▼▼
+
+    /**
+     * 로컬 DB의 모든 채팅방 목록을 삭제합니다.
+     */
+    suspend fun deleteAllLocalChatRooms()
+
+    /**
+     * 로컬 DB의 모든 채팅 메시지를 삭제합니다.
+     */
+    suspend fun deleteAllLocalChatMessages()
 }
